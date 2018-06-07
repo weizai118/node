@@ -99,6 +99,11 @@ class GlobalHandles {
   // Clear the weakness of a global handle.
   static void* ClearWeakness(Object** location);
 
+  // Mark the reference to this object independent.
+  static void MarkIndependent(Object** location);
+
+  static bool IsIndependent(Object** location);
+
   // Tells whether global handle is near death.
   static bool IsNearDeath(Object** location);
 
@@ -132,11 +137,12 @@ class GlobalHandles {
 
   // Iterates over weak roots on the heap.
   void IterateWeakRootsForFinalizers(RootVisitor* v);
-  void IterateWeakRootsForPhantomHandles(WeakSlotCallback should_reset_handle);
+  void IterateWeakRootsForPhantomHandles(
+      WeakSlotCallbackWithHeap should_reset_handle);
 
   // Marks all handles that should be finalized based on the predicate
   // |should_reset_handle| as pending.
-  void IdentifyWeakHandles(WeakSlotCallback should_reset_handle);
+  void IdentifyWeakHandles(WeakSlotCallbackWithHeap should_reset_handle);
 
   // NOTE: Five ...NewSpace... functions below are used during
   // scavenge collections and iterate over sets of handles that are
@@ -155,7 +161,8 @@ class GlobalHandles {
   void MarkNewSpaceWeakUnmodifiedObjectsPending(
       WeakSlotCallbackWithHeap is_dead);
 
-  // Iterates over weak unmodified handles. See the note above.
+  // Iterates over weak independent or unmodified handles.
+  // See the note above.
   void IterateNewSpaceWeakUnmodifiedRootsForFinalizers(RootVisitor* v);
   void IterateNewSpaceWeakUnmodifiedRootsForPhantomHandles(
       RootVisitor* v, WeakSlotCallbackWithHeap should_reset_handle);

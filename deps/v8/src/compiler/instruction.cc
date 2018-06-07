@@ -603,8 +603,7 @@ std::ostream& operator<<(std::ostream& os, const Constant& constant) {
     case Constant::kFloat64:
       return os << constant.ToFloat64().value();
     case Constant::kExternalReference:
-      return os << static_cast<const void*>(
-                       constant.ToExternalReference().address());
+      return os << constant.ToExternalReference().address();
     case Constant::kHeapObject:
       return os << Brief(*constant.ToHeapObject());
     case Constant::kRpoNumber:
@@ -692,7 +691,7 @@ static InstructionBlock* InstructionBlockFor(Zone* zone,
 }
 
 std::ostream& operator<<(std::ostream& os,
-                         PrintableInstructionBlock& printable_block) {
+                         const PrintableInstructionBlock& printable_block) {
   const InstructionBlock* block = printable_block.block_;
   const RegisterConfiguration* config = printable_block.register_configuration_;
   const InstructionSequence* code = printable_block.code_;
