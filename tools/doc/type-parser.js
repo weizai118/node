@@ -15,13 +15,10 @@ const jsPrimitives = {
 
 const jsGlobalObjectsUrl = `${jsDocPrefix}Reference/Global_Objects/`;
 const jsGlobalTypes = [
-  'Array', 'ArrayBuffer', 'AsyncFunction', 'DataView', 'Date', 'Error',
-  'EvalError', 'Float32Array', 'Float64Array', 'Function', 'Generator',
-  'GeneratorFunction', 'Int16Array', 'Int32Array', 'Int8Array', 'Map', 'Object',
-  'Promise', 'Proxy', 'RangeError', 'ReferenceError', 'RegExp', 'Set',
+  'Array', 'ArrayBuffer', 'DataView', 'Date', 'Error', 'EvalError', 'Function',
+  'Object', 'Promise', 'RangeError', 'ReferenceError', 'RegExp', 'Set',
   'SharedArrayBuffer', 'SyntaxError', 'TypeError', 'TypedArray', 'URIError',
-  'Uint16Array', 'Uint32Array', 'Uint8Array', 'Uint8ClampedArray', 'WeakMap',
-  'WeakSet'
+  'Uint8Array',
 ];
 
 const customTypesMap = {
@@ -30,6 +27,8 @@ const customTypesMap = {
   'this': `${jsDocPrefix}Reference/Operators/this`,
 
   'AsyncIterator': 'https://github.com/tc39/proposal-async-iteration',
+
+  'bigint': 'https://github.com/tc39/proposal-bigint',
 
   'Iterable':
     `${jsDocPrefix}Reference/Iteration_protocols#The_iterable_protocol`,
@@ -59,6 +58,7 @@ const customTypesMap = {
   'EventEmitter': 'events.html#events_class_eventemitter',
 
   'FileHandle': 'fs.html#fs_class_filehandle',
+  'fs.Dirent': 'fs.html#fs_class_fs_dirent',
   'fs.FSWatcher': 'fs.html#fs_class_fs_fswatcher',
   'fs.ReadStream': 'fs.html#fs_class_fs_readstream',
   'fs.Stats': 'fs.html#fs_class_fs_stats',
@@ -119,7 +119,9 @@ const customTypesMap = {
   'URL': 'url.html#url_the_whatwg_url_api',
   'URLSearchParams': 'url.html#url_class_urlsearchparams',
 
-  'MessagePort': 'worker.html#worker_class_messageport'
+  'MessagePort': 'worker_threads.html#worker_threads_class_messageport',
+
+  'zlib options': 'zlib.html#zlib_class_options',
 };
 
 const arrayPart = /(?:\[])+$/;

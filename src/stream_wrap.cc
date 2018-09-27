@@ -25,7 +25,6 @@
 #include "env-inl.h"
 #include "handle_wrap.h"
 #include "node_buffer.h"
-#include "node_counters.h"
 #include "pipe_wrap.h"
 #include "req_wrap-inl.h"
 #include "tcp_wrap.h"
@@ -68,7 +67,7 @@ void LibuvStreamWrap::Initialize(Local<Object> target,
       FIXED_ONE_BYTE_STRING(env->isolate(), "ShutdownWrap");
   sw->SetClassName(wrapString);
   AsyncWrap::AddWrapMethods(env, sw);
-  target->Set(wrapString, sw->GetFunction());
+  target->Set(wrapString, sw->GetFunction(env->context()).ToLocalChecked());
   env->set_shutdown_wrap_template(sw->InstanceTemplate());
 
   Local<FunctionTemplate> ww =
@@ -78,7 +77,8 @@ void LibuvStreamWrap::Initialize(Local<Object> target,
       FIXED_ONE_BYTE_STRING(env->isolate(), "WriteWrap");
   ww->SetClassName(writeWrapString);
   AsyncWrap::AddWrapMethods(env, ww);
-  target->Set(writeWrapString, ww->GetFunction());
+  target->Set(writeWrapString,
+              ww->GetFunction(env->context()).ToLocalChecked());
   env->set_write_wrap_template(ww->InstanceTemplate());
 }
 
@@ -97,8 +97,7 @@ LibuvStreamWrap::LibuvStreamWrap(Environment* env,
 
 
 void LibuvStreamWrap::AddMethods(Environment* env,
-                                 v8::Local<v8::FunctionTemplate> target,
-                                 int flags) {
+                                 v8::Local<v8::FunctionTemplate> target) {
   Local<FunctionTemplate> get_write_queue_size =
       FunctionTemplate::New(env->isolate(),
                             GetWriteQueueSize,
@@ -110,7 +109,7 @@ void LibuvStreamWrap::AddMethods(Environment* env,
       Local<FunctionTemplate>(),
       static_cast<PropertyAttribute>(ReadOnly | DontDelete));
   env->SetProtoMethod(target, "setBlocking", SetBlocking);
-  StreamBase::AddMethods<LibuvStreamWrap>(env, target, flags);
+  StreamBase::AddMethods<LibuvStreamWrap>(env, target);
 }
 
 
@@ -207,12 +206,6 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   CHECK_EQ(persistent().IsEmpty(), false);
 
   if (nread > 0) {
-    if (is_tcp()) {
-      NODE_COUNT_NET_BYTES_RECV(nread);
-    } else if (is_named_pipe()) {
-      NODE_COUNT_PIPE_BYTES_RECV(nread);
-    }
-
     Local<Object> pending_obj;
 
     if (type == UV_TCP) {
@@ -277,10 +270,7 @@ WriteWrap* LibuvStreamWrap::CreateWriteWrap(Local<Object> object) {
 
 int LibuvStreamWrap::DoShutdown(ShutdownWrap* req_wrap_) {
   LibuvShutdownWrap* req_wrap = static_cast<LibuvShutdownWrap*>(req_wrap_);
-  int err;
-  err = uv_shutdown(req_wrap->req(), stream(), AfterUvShutdown);
-  req_wrap->Dispatched();
-  return err;
+  return req_wrap->Dispatch(uv_shutdown, stream(), AfterUvShutdown);
 }
 
 
@@ -341,23 +331,21 @@ int LibuvStreamWrap::DoWrite(WriteWrap* req_wrap,
   LibuvWriteWrap* w = static_cast<LibuvWriteWrap*>(req_wrap);
   int r;
   if (send_handle == nullptr) {
-    r = uv_write(w->req(), stream(), bufs, count, AfterUvWrite);
+    r = w->Dispatch(uv_write, stream(), bufs, count, AfterUvWrite);
   } else {
-    r = uv_write2(w->req(), stream(), bufs, count, send_handle, AfterUvWrite);
+    r = w->Dispatch(uv_write2,
+                    stream(),
+                    bufs,
+                    count,
+                    send_handle,
+                    AfterUvWrite);
   }
 
   if (!r) {
     size_t bytes = 0;
     for (size_t i = 0; i < count; i++)
       bytes += bufs[i].len;
-    if (stream()->type == UV_TCP) {
-      NODE_COUNT_NET_BYTES_SENT(bytes);
-    } else if (stream()->type == UV_NAMED_PIPE) {
-      NODE_COUNT_PIPE_BYTES_SENT(bytes);
-    }
   }
-
-  w->Dispatched();
 
   return r;
 }
@@ -373,12 +361,7 @@ void LibuvStreamWrap::AfterUvWrite(uv_write_t* req, int status) {
   req_wrap->Done(status);
 }
 
-void LibuvStreamWrap::Close(v8::Local<v8::Value> close_callback) {
-  ReadStop();
-  HandleWrap::Close(close_callback);
-}
-
 }  // namespace node
 
-NODE_BUILTIN_MODULE_CONTEXT_AWARE(stream_wrap,
-                                  node::LibuvStreamWrap::Initialize)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(stream_wrap,
+                                   node::LibuvStreamWrap::Initialize)

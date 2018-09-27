@@ -1,3 +1,4 @@
+// Flags: --expose-internals
 'use strict';
 
 require('../common');
@@ -9,8 +10,9 @@ const assert = require('assert');
 
 // Objects that call StreamBase::AddMethods, when setting up
 // their prototype
-const TTY = process.binding('tty_wrap').TTY;
-const UDP = process.binding('udp_wrap').UDP;
+const { internalBinding } = require('internal/test/binding');
+const TTY = internalBinding('tty_wrap').TTY;
+const UDP = internalBinding('udp_wrap').UDP;
 
 {
   // Should throw instead of raise assertions

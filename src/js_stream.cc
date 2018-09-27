@@ -14,6 +14,7 @@ using v8::Context;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
 using v8::HandleScope;
+using v8::Int32;
 using v8::Local;
 using v8::Object;
 using v8::String;
@@ -154,7 +155,8 @@ void JSStream::Finish(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsObject());
   Wrap* w = static_cast<Wrap*>(StreamReq::FromObject(args[0].As<Object>()));
 
-  w->Done(args[1]->Int32Value());
+  CHECK(args[1]->IsInt32());
+  w->Done(args[1].As<Int32>()->Value());
 }
 
 
@@ -208,10 +210,10 @@ void JSStream::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "readBuffer", ReadBuffer);
   env->SetProtoMethod(t, "emitEOF", EmitEOF);
 
-  StreamBase::AddMethods<JSStream>(env, t, StreamBase::kFlagHasWritev);
-  target->Set(jsStreamString, t->GetFunction());
+  StreamBase::AddMethods<JSStream>(env, t);
+  target->Set(jsStreamString, t->GetFunction(context).ToLocalChecked());
 }
 
 }  // namespace node
 
-NODE_BUILTIN_MODULE_CONTEXT_AWARE(js_stream, node::JSStream::Initialize)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(js_stream, node::JSStream::Initialize)

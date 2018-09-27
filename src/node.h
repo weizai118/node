@@ -83,15 +83,18 @@
 # define NODE_GNUC_AT_LEAST(major, minor, patch) (0)
 #endif
 
-#if NODE_CLANG_AT_LEAST(2, 9, 0) || NODE_GNUC_AT_LEAST(4, 5, 0)
-# define NODE_DEPRECATED(message, declarator)                                 \
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+# define NODE_DEPRECATED(message, declarator) declarator
+#else  // NODE_WANT_INTERNALS
+# if NODE_CLANG_AT_LEAST(2, 9, 0) || NODE_GNUC_AT_LEAST(4, 5, 0)
+#  define NODE_DEPRECATED(message, declarator)                                 \
     __attribute__((deprecated(message))) declarator
-#elif defined(_MSC_VER)
-# define NODE_DEPRECATED(message, declarator)                                 \
+# elif defined(_MSC_VER)
+#  define NODE_DEPRECATED(message, declarator)                                 \
     __declspec(deprecated) declarator
-#else
-# define NODE_DEPRECATED(message, declarator)                                 \
-    declarator
+# else
+#  define NODE_DEPRECATED(message, declarator) declarator
+# endif
 #endif
 
 // Forward-declare libuv loop
@@ -199,16 +202,26 @@ typedef intptr_t ssize_t;
 
 namespace node {
 
-NODE_EXTERN extern bool no_deprecation;
+// TODO(addaleax): Remove all of these.
+NODE_DEPRECATED("use command-line flags",
+                NODE_EXTERN extern bool no_deprecation);
 #if HAVE_OPENSSL
-NODE_EXTERN extern bool ssl_openssl_cert_store;
+NODE_DEPRECATED("use command-line flags",
+                NODE_EXTERN extern bool ssl_openssl_cert_store);
 # if NODE_FIPS_MODE
-NODE_EXTERN extern bool enable_fips_crypto;
-NODE_EXTERN extern bool force_fips_crypto;
+NODE_DEPRECATED("use command-line flags",
+                NODE_EXTERN extern bool enable_fips_crypto);
+NODE_DEPRECATED("user command-line flags",
+                NODE_EXTERN extern bool force_fips_crypto);
 # endif
 #endif
 
+// TODO(addaleax): Officially deprecate this and replace it with something
+// better suited for a public embedder API.
 NODE_EXTERN int Start(int argc, char* argv[]);
+
+// TODO(addaleax): Officially deprecate this and replace it with something
+// better suited for a public embedder API.
 NODE_EXTERN void Init(int* argc,
                       const char** argv,
                       int* exec_argc,
@@ -222,24 +235,27 @@ NODE_EXTERN void FreeArrayBufferAllocator(ArrayBufferAllocator* allocator);
 class IsolateData;
 class Environment;
 
-class MultiIsolatePlatform : public v8::Platform {
+class NODE_EXTERN MultiIsolatePlatform : public v8::Platform {
  public:
   virtual ~MultiIsolatePlatform() { }
-  virtual void DrainBackgroundTasks(v8::Isolate* isolate) = 0;
+  // Returns true if work was dispatched or executed. New tasks that are
+  // posted during flushing of the queue are postponed until the next
+  // flushing.
+  virtual bool FlushForegroundTasks(v8::Isolate* isolate) = 0;
+  virtual void DrainTasks(v8::Isolate* isolate) = 0;
   virtual void CancelPendingDelayedTasks(v8::Isolate* isolate) = 0;
 
   // These will be called by the `IsolateData` creation/destruction functions.
-  virtual void RegisterIsolate(IsolateData* isolate_data,
+  virtual void RegisterIsolate(v8::Isolate* isolate,
                                struct uv_loop_s* loop) = 0;
-  virtual void UnregisterIsolate(IsolateData* isolate_data) = 0;
+  virtual void UnregisterIsolate(v8::Isolate* isolate) = 0;
 };
 
 // Creates a new isolate with Node.js-specific settings.
-NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator);
+NODE_EXTERN v8::Isolate* NewIsolate(ArrayBufferAllocator* allocator,
+                                    struct uv_loop_s* event_loop);
 
-// Creates a new context with Node.js-specific tweaks.  Currently, it removes
-// the `v8BreakIterator` property from the global `Intl` object if present.
-// See https://github.com/nodejs/node/issues/14909 for more info.
+// Creates a new context with Node.js-specific tweaks.
 NODE_EXTERN v8::Local<v8::Context> NewContext(
     v8::Isolate* isolate,
     v8::Local<v8::ObjectTemplate> object_template =
@@ -248,21 +264,15 @@ NODE_EXTERN v8::Local<v8::Context> NewContext(
 // If `platform` is passed, it will be used to register new Worker instances.
 // It can be `nullptr`, in which case creating new Workers inside of
 // Environments that use this `IsolateData` will not work.
-// TODO(helloshuangzi): switch to default parameters.
-NODE_EXTERN IsolateData* CreateIsolateData(
-    v8::Isolate* isolate,
-    struct uv_loop_s* loop);
 NODE_EXTERN IsolateData* CreateIsolateData(
     v8::Isolate* isolate,
     struct uv_loop_s* loop,
-    MultiIsolatePlatform* platform);
-NODE_EXTERN IsolateData* CreateIsolateData(
-    v8::Isolate* isolate,
-    struct uv_loop_s* loop,
-    MultiIsolatePlatform* platform,
-    ArrayBufferAllocator* allocator);
+    MultiIsolatePlatform* platform = nullptr,
+    ArrayBufferAllocator* allocator = nullptr);
 NODE_EXTERN void FreeIsolateData(IsolateData* isolate_data);
 
+// TODO(addaleax): Add an official variant using STL containers, and move
+// per-Environment options parsing here.
 NODE_EXTERN Environment* CreateEnvironment(IsolateData* isolate_data,
                                            v8::Local<v8::Context> context,
                                            int argc,
@@ -281,6 +291,7 @@ NODE_EXTERN MultiIsolatePlatform* GetMainThreadMultiIsolatePlatform();
 NODE_EXTERN MultiIsolatePlatform* CreatePlatform(
     int thread_pool_size,
     v8::TracingController* tracing_controller);
+MultiIsolatePlatform* InitializeV8Platform(int thread_pool_size);
 NODE_EXTERN void FreePlatform(MultiIsolatePlatform* platform);
 
 NODE_EXTERN void EmitBeforeExit(Environment* env);
@@ -301,7 +312,8 @@ NODE_EXTERN struct uv_loop_s* GetCurrentEventLoop(v8::Isolate* isolate);
     v8::Isolate* isolate = target->GetIsolate();                              \
     v8::Local<v8::Context> context = isolate->GetCurrentContext();            \
     v8::Local<v8::String> constant_name =                                     \
-        v8::String::NewFromUtf8(isolate, #constant);                          \
+        v8::String::NewFromUtf8(isolate, #constant,                           \
+            v8::NewStringType::kInternalized).ToLocalChecked();               \
     v8::Local<v8::Number> constant_value =                                    \
         v8::Number::New(isolate, static_cast<double>(constant));              \
     v8::PropertyAttribute constant_attributes =                               \
@@ -342,7 +354,8 @@ inline void NODE_SET_METHOD(v8::Local<v8::Template> recv,
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate,
                                                                 callback);
-  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name);
+  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name,
+      v8::NewStringType::kInternalized).ToLocalChecked();
   t->SetClassName(fn_name);
   recv->Set(fn_name, t);
 }
@@ -353,10 +366,12 @@ inline void NODE_SET_METHOD(v8::Local<v8::Object> recv,
                             v8::FunctionCallback callback) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate,
                                                                 callback);
-  v8::Local<v8::Function> fn = t->GetFunction();
-  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name);
+  v8::Local<v8::Function> fn = t->GetFunction(context).ToLocalChecked();
+  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name,
+      v8::NewStringType::kInternalized).ToLocalChecked();
   fn->SetName(fn_name);
   recv->Set(fn_name, fn);
 }
@@ -372,7 +387,8 @@ inline void NODE_SET_PROTOTYPE_METHOD(v8::Local<v8::FunctionTemplate> recv,
   v8::Local<v8::Signature> s = v8::Signature::New(isolate, recv);
   v8::Local<v8::FunctionTemplate> t =
       v8::FunctionTemplate::New(isolate, callback, v8::Local<v8::Value>(), s);
-  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name);
+  v8::Local<v8::String> fn_name = v8::String::NewFromUtf8(isolate, name,
+      v8::NewStringType::kInternalized).ToLocalChecked();
   t->SetClassName(fn_name);
   recv->PrototypeTemplate()->Set(fn_name, t);
 }
@@ -400,13 +416,13 @@ NODE_DEPRECATED("Use FatalException(isolate, ...)",
   return FatalException(v8::Isolate::GetCurrent(), try_catch);
 })
 
-// Don't call with encoding=UCS2.
 NODE_EXTERN v8::Local<v8::Value> Encode(v8::Isolate* isolate,
                                         const char* buf,
                                         size_t len,
                                         enum encoding encoding = LATIN1);
 
-// The input buffer should be in host endianness.
+// Warning: This reverses endianness on Big Endian platforms, even though the
+// signature using uint16_t implies that it should not.
 NODE_EXTERN v8::Local<v8::Value> Encode(v8::Isolate* isolate,
                                         const uint16_t* buf,
                                         size_t len);
@@ -577,6 +593,28 @@ extern "C" NODE_EXTERN void node_module_register(void* mod);
  */
 #define NODE_MODULE_DECL /* nothing */
 
+#define NODE_MODULE_INITIALIZER_BASE node_register_module_v
+
+#define NODE_MODULE_INITIALIZER_X(base, version)                      \
+    NODE_MODULE_INITIALIZER_X_HELPER(base, version)
+
+#define NODE_MODULE_INITIALIZER_X_HELPER(base, version) base##version
+
+#define NODE_MODULE_INITIALIZER                                       \
+  NODE_MODULE_INITIALIZER_X(NODE_MODULE_INITIALIZER_BASE,             \
+      NODE_MODULE_VERSION)
+
+#define NODE_MODULE_INIT()                                            \
+  extern "C" NODE_MODULE_EXPORT void                                  \
+  NODE_MODULE_INITIALIZER(v8::Local<v8::Object> exports,              \
+                          v8::Local<v8::Value> module,                \
+                          v8::Local<v8::Context> context);            \
+  NODE_MODULE_CONTEXT_AWARE(NODE_GYP_MODULE_NAME,                     \
+                            NODE_MODULE_INITIALIZER)                  \
+  void NODE_MODULE_INITIALIZER(v8::Local<v8::Object> exports,         \
+                               v8::Local<v8::Value> module,           \
+                               v8::Local<v8::Context> context)
+
 /* Called after the event loop exits but before the VM is disposed.
  * Callbacks are run in reverse order of registration, i.e. newest first.
  */
@@ -659,6 +697,10 @@ class InternalCallbackScope;
  *
  * This object should be stack-allocated to ensure that it is contained in a
  * valid HandleScope.
+ *
+ * Exceptions happening within this scope will be treated like uncaught
+ * exceptions. If this behaviour is undesirable, a new `v8::TryCatch` scope
+ * needs to be created inside of this scope.
  */
 class NODE_EXTERN CallbackScope {
  public:

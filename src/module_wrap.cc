@@ -362,6 +362,7 @@ MaybeLocal<Module> ModuleWrap::ResolveCallback(Local<Context> context,
                                                Local<String> specifier,
                                                Local<Module> referrer) {
   Environment* env = Environment::GetCurrent(context);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   Isolate* isolate = env->isolate();
   if (env->module_map.count(referrer->GetIdentityHash()) == 0) {
     env->ThrowError("linking error, unknown module");
@@ -488,8 +489,12 @@ Maybe<uv_file> CheckFile(const std::string& path,
   return Just(fd);
 }
 
+using Exists = PackageConfig::Exists;
+using IsValid = PackageConfig::IsValid;
+using HasMain = PackageConfig::HasMain;
+
 const PackageConfig& GetPackageConfig(Environment* env,
-                                                   const std::string path) {
+                                      const std::string& path) {
   auto existing = env->package_json_cache.find(path);
   if (existing != env->package_json_cache.end()) {
     return existing->second;
@@ -530,7 +535,7 @@ const PackageConfig& GetPackageConfig(Environment* env,
   }
 
   Local<Value> pkg_main;
-  HasMain::Bool has_main = HasMain::No;
+  HasMain has_main = HasMain::No;
   std::string main_std;
   if (pkg_json->Get(env->context(), env->main_string()).ToLocal(&pkg_main)) {
     has_main = HasMain::Yes;
@@ -696,6 +701,7 @@ static MaybeLocal<Promise> ImportModuleDynamically(
     Local<String> specifier) {
   Isolate* iso = context->GetIsolate();
   Environment* env = Environment::GetCurrent(context);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   v8::EscapableHandleScope handle_scope(iso);
 
   if (env->context() != context) {
@@ -746,8 +752,8 @@ void ModuleWrap::SetImportModuleDynamicallyCallback(
 
 void ModuleWrap::HostInitializeImportMetaObjectCallback(
     Local<Context> context, Local<Module> module, Local<Object> meta) {
-  Isolate* isolate = context->GetIsolate();
   Environment* env = Environment::GetCurrent(context);
+  CHECK_NOT_NULL(env);  // TODO(addaleax): Handle nullptr here.
   ModuleWrap* module_wrap = GetFromModule(env, module);
 
   if (module_wrap == nullptr) {
@@ -758,7 +764,7 @@ void ModuleWrap::HostInitializeImportMetaObjectCallback(
   Local<Function> callback =
       env->host_initialize_import_meta_object_callback();
   Local<Value> args[] = { wrap, meta };
-  callback->Call(context, Undefined(isolate), arraysize(args), args)
+  callback->Call(context, Undefined(env->isolate()), arraysize(args), args)
       .ToLocalChecked();
 }
 
@@ -789,13 +795,14 @@ void ModuleWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(tpl, "link", Link);
   env->SetProtoMethod(tpl, "instantiate", Instantiate);
   env->SetProtoMethod(tpl, "evaluate", Evaluate);
-  env->SetProtoMethod(tpl, "namespace", Namespace);
-  env->SetProtoMethod(tpl, "getStatus", GetStatus);
-  env->SetProtoMethod(tpl, "getError", GetError);
-  env->SetProtoMethod(tpl, "getStaticDependencySpecifiers",
-                      GetStaticDependencySpecifiers);
+  env->SetProtoMethodNoSideEffect(tpl, "namespace", Namespace);
+  env->SetProtoMethodNoSideEffect(tpl, "getStatus", GetStatus);
+  env->SetProtoMethodNoSideEffect(tpl, "getError", GetError);
+  env->SetProtoMethodNoSideEffect(tpl, "getStaticDependencySpecifiers",
+                                  GetStaticDependencySpecifiers);
 
-  target->Set(FIXED_ONE_BYTE_STRING(isolate, "ModuleWrap"), tpl->GetFunction());
+  target->Set(FIXED_ONE_BYTE_STRING(isolate, "ModuleWrap"),
+              tpl->GetFunction(context).ToLocalChecked());
   env->SetMethod(target, "resolve", Resolve);
   env->SetMethod(target,
                  "setImportModuleDynamicallyCallback",

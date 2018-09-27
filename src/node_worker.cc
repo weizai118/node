@@ -1,4 +1,5 @@
 #include "node_worker.h"
+#include "debug_utils.h"
 #include "node_errors.h"
 #include "node_internals.h"
 #include "node_buffer.h"
@@ -7,6 +8,8 @@
 #include "util-inl.h"
 #include "async_wrap.h"
 #include "async_wrap-inl.h"
+
+#include <string>
 
 using v8::ArrayBuffer;
 using v8::Context;
@@ -29,21 +32,52 @@ namespace worker {
 
 namespace {
 
-double next_thread_id = 1;
+uint64_t next_thread_id = 1;
 Mutex next_thread_id_mutex;
+
+#if NODE_USE_V8_PLATFORM && HAVE_INSPECTOR
+void StartWorkerInspector(Environment* child, const std::string& url) {
+  child->inspector_agent()->Start(url, nullptr, false);
+}
+
+void AddWorkerInspector(Environment* parent,
+                        Environment* child,
+                        int id,
+                        const std::string& url) {
+  parent->inspector_agent()->AddWorkerInspector(id, url,
+                                                child->inspector_agent());
+}
+
+void WaitForWorkerInspectorToStop(Environment* child) {
+  child->inspector_agent()->WaitForDisconnect();
+  child->inspector_agent()->Stop();
+}
+
+#else
+// No-ops
+void StartWorkerInspector(Environment* child, const std::string& url) {}
+void AddWorkerInspector(Environment* parent,
+                        Environment* child,
+                        int id,
+                        const std::string& url) {}
+void WaitForWorkerInspectorToStop(Environment* child) {}
+#endif
 
 }  // anonymous namespace
 
-Worker::Worker(Environment* env, Local<Object> wrap)
-    : AsyncWrap(env, wrap, AsyncWrap::PROVIDER_WORKER) {
+Worker::Worker(Environment* env, Local<Object> wrap, const std::string& url)
+    : AsyncWrap(env, wrap, AsyncWrap::PROVIDER_WORKER), url_(url) {
   // Generate a new thread id.
   {
     Mutex::ScopedLock next_thread_id_lock(next_thread_id_mutex);
     thread_id_ = next_thread_id++;
   }
+
+  Debug(this, "Creating worker with id %llu", thread_id_);
   wrap->Set(env->context(),
             env->thread_id_string(),
-            Number::New(env->isolate(), thread_id_)).FromJust();
+            Number::New(env->isolate(),
+                        static_cast<double>(thread_id_))).FromJust();
 
   // Set up everything that needs to be set up in the parent environment.
   parent_port_ = MessagePort::New(env, env->context());
@@ -61,17 +95,9 @@ Worker::Worker(Environment* env, Local<Object> wrap)
 
   array_buffer_allocator_.reset(CreateArrayBufferAllocator());
 
-  isolate_ = NewIsolate(array_buffer_allocator_.get());
-  CHECK_NE(isolate_, nullptr);
   CHECK_EQ(uv_loop_init(&loop_), 0);
-
-  thread_exit_async_.reset(new uv_async_t);
-  thread_exit_async_->data = this;
-  CHECK_EQ(uv_async_init(env->event_loop(),
-                         thread_exit_async_.get(),
-                         [](uv_async_t* handle) {
-    static_cast<Worker*>(handle->data)->OnThreadStopped();
-  }), 0);
+  isolate_ = NewIsolate(array_buffer_allocator_.get(), &loop_);
+  CHECK_NE(isolate_, nullptr);
 
   {
     // Enter an environment capable of executing code in the child Isolate
@@ -98,11 +124,17 @@ Worker::Worker(Environment* env, Local<Object> wrap)
     env_->set_worker_context(this);
     env_->set_thread_id(thread_id_);
 
-    env_->Start(0, nullptr, 0, nullptr, env->profiler_idle_notifier_started());
+    env_->Start(std::vector<std::string>{},
+                std::vector<std::string>{},
+                env->profiler_idle_notifier_started());
+    // Done while on the parent thread
+    AddWorkerInspector(env, env_.get(), thread_id_, url_);
   }
 
   // The new isolate won't be bothered on this thread again.
   isolate_->DiscardThreadSpecificMetadata();
+
+  Debug(this, "Set up worker with id %llu", thread_id_);
 }
 
 bool Worker::is_stopped() const {
@@ -111,9 +143,16 @@ bool Worker::is_stopped() const {
 }
 
 void Worker::Run() {
+  std::string name = "WorkerThread ";
+  name += std::to_string(thread_id_);
+  TRACE_EVENT_METADATA1(
+      "__metadata", "thread_name", "name",
+      TRACE_STR_COPY(name.c_str()));
   MultiIsolatePlatform* platform = isolate_data_->platform();
   CHECK_NE(platform, nullptr);
+  bool inspector_started = false;
 
+  Debug(this, "Starting worker with id %llu", thread_id_);
   {
     Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
@@ -134,15 +173,22 @@ void Worker::Run() {
         // within it.
         if (child_port_ != nullptr)
           env_->set_message_port(child_port_->object(isolate_));
+
+        Debug(this, "Created message port for worker %llu", thread_id_);
       }
 
       if (!is_stopped()) {
+        StartWorkerInspector(env_.get(), url_);
+        inspector_started = true;
+
         HandleScope handle_scope(isolate_);
         Environment::AsyncCallbackScope callback_scope(env_.get());
         env_->async_hooks()->push_async_ids(1, 0);
         // This loads the Node bootstrapping code.
         LoadEnvironment(env_.get());
         env_->async_hooks()->pop_async_id(1);
+
+        Debug(this, "Loaded environment for worker %llu", thread_id_);
       }
 
       {
@@ -155,7 +201,7 @@ void Worker::Run() {
           uv_run(&loop_, UV_RUN_DEFAULT);
           if (is_stopped()) break;
 
-          platform->DrainBackgroundTasks(isolate_);
+          platform->DrainTasks(isolate_);
 
           more = uv_loop_alive(&loop_);
           if (more && !is_stopped())
@@ -180,6 +226,9 @@ void Worker::Run() {
       Mutex::ScopedLock lock(mutex_);
       if (exit_code_ == 0 && !stopped)
         exit_code_ = exit_code;
+
+      Debug(this, "Exiting thread for worker %llu with exit code %d",
+            thread_id_, exit_code_);
     }
 
     env_->set_can_call_into_js(false);
@@ -200,6 +249,8 @@ void Worker::Run() {
       env_->stop_sub_worker_contexts();
       env_->RunCleanup();
       RunAtExit(env_.get());
+      if (inspector_started)
+        WaitForWorkerInspectorToStop(env_.get());
 
       {
         Mutex::ScopedLock stopped_lock(stopped_mutex_);
@@ -211,7 +262,7 @@ void Worker::Run() {
       // This call needs to be made while the `Environment` is still alive
       // because we assume that it is available for async tracking in the
       // NodePlatform implementation.
-      platform->DrainBackgroundTasks(isolate_);
+      platform->DrainTasks(isolate_);
     }
 
     env_.reset();
@@ -219,26 +270,34 @@ void Worker::Run() {
 
   DisposeIsolate();
 
-  // Need to run the loop one more time to close the platform's uv_async_t
-  uv_run(&loop_, UV_RUN_ONCE);
-
   {
     Mutex::ScopedLock lock(mutex_);
     CHECK(thread_exit_async_);
     scheduled_on_thread_stopped_ = true;
     uv_async_send(thread_exit_async_.get());
   }
+
+  Debug(this, "Worker %llu thread stops", thread_id_);
 }
 
 void Worker::DisposeIsolate() {
+  if (env_) {
+    CHECK_NOT_NULL(isolate_);
+    Locker locker(isolate_);
+    Isolate::Scope isolate_scope(isolate_);
+    env_.reset();
+  }
+
   if (isolate_ == nullptr)
     return;
 
+  Debug(this, "Worker %llu dispose isolate", thread_id_);
   CHECK(isolate_data_);
   MultiIsolatePlatform* platform = isolate_data_->platform();
   platform->CancelPendingDelayedTasks(isolate_);
 
   isolate_data_.reset();
+  platform->UnregisterIsolate(isolate_);
 
   isolate_->Dispose();
   isolate_ = nullptr;
@@ -263,20 +322,21 @@ void Worker::JoinThread() {
 }
 
 void Worker::OnThreadStopped() {
-  Mutex::ScopedLock lock(mutex_);
-  scheduled_on_thread_stopped_ = false;
-
   {
-    Mutex::ScopedLock stopped_lock(stopped_mutex_);
-    CHECK(stopped_);
+    Mutex::ScopedLock lock(mutex_);
+    scheduled_on_thread_stopped_ = false;
+
+    Debug(this, "Worker %llu thread stopped", thread_id_);
+
+    {
+      Mutex::ScopedLock stopped_lock(stopped_mutex_);
+      CHECK(stopped_);
+    }
+
+    CHECK_EQ(child_port_, nullptr);
+    parent_port_ = nullptr;
   }
 
-  CHECK_EQ(child_port_, nullptr);
-  parent_port_ = nullptr;
-
-  // It's okay to join the thread while holding the mutex because
-  // OnThreadStopped means it's no longer doing any work that might grab it
-  // and really just silently exiting.
   JoinThread();
 
   {
@@ -304,11 +364,17 @@ Worker::~Worker() {
   CHECK(stopped_);
   CHECK(thread_joined_);
   CHECK_EQ(child_port_, nullptr);
-  CHECK_EQ(uv_loop_close(&loop_), 0);
 
   // This has most likely already happened within the worker thread -- this
   // is just in case Worker creation failed early.
   DisposeIsolate();
+
+  // Need to run the loop one more time to close the platform's uv_async_t
+  uv_run(&loop_, UV_RUN_ONCE);
+
+  CheckedUvLoopClose(&loop_);
+
+  Debug(this, "Worker %llu destroyed", thread_id_);
 }
 
 void Worker::New(const FunctionCallbackInfo<Value>& args) {
@@ -321,7 +387,15 @@ void Worker::New(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  new Worker(env, args.This());
+  std::string url;
+  // Argument might be a string or URL
+  if (args.Length() == 1 && !args[0]->IsNullOrUndefined()) {
+    Utf8Value value(
+        args.GetIsolate(),
+        args[0]->ToString(env->context()).FromMaybe(v8::Local<v8::String>()));
+    url.append(value.out(), value.length());
+  }
+  new Worker(env, args.This(), url);
 }
 
 void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
@@ -331,16 +405,26 @@ void Worker::StartThread(const FunctionCallbackInfo<Value>& args) {
 
   w->env()->add_sub_worker_context(w);
   w->stopped_ = false;
+  w->thread_joined_ = false;
+
+  w->thread_exit_async_.reset(new uv_async_t);
+  w->thread_exit_async_->data = w;
+  CHECK_EQ(uv_async_init(w->env()->event_loop(),
+                         w->thread_exit_async_.get(),
+                         [](uv_async_t* handle) {
+    static_cast<Worker*>(handle->data)->OnThreadStopped();
+  }), 0);
+
   CHECK_EQ(uv_thread_create(&w->tid_, [](void* arg) {
     static_cast<Worker*>(arg)->Run();
   }, static_cast<void*>(w)), 0);
-  w->thread_joined_ = false;
 }
 
 void Worker::StopThread(const FunctionCallbackInfo<Value>& args) {
   Worker* w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.This());
 
+  Debug(w, "Worker %llu is getting stopped by parent", w->thread_id_);
   w->Exit(1);
   w->JoinThread();
 }
@@ -362,6 +446,9 @@ void Worker::Unref(const FunctionCallbackInfo<Value>& args) {
 void Worker::Exit(int code) {
   Mutex::ScopedLock lock(mutex_);
   Mutex::ScopedLock stopped_lock(stopped_mutex_);
+
+  Debug(this, "Worker %llu called Exit(%d)", thread_id_, code);
+
   if (!stopped_) {
     CHECK_NE(env_, nullptr);
     stopped_ = true;
@@ -370,10 +457,6 @@ void Worker::Exit(int code) {
       child_port_->StopEventLoop();
     isolate_->TerminateExecution();
   }
-}
-
-size_t Worker::self_size() const {
-  return sizeof(*this);
 }
 
 namespace {
@@ -409,7 +492,7 @@ void InitWorker(Local<Object> target,
     Local<String> workerString =
         FIXED_ONE_BYTE_STRING(env->isolate(), "Worker");
     w->SetClassName(workerString);
-    target->Set(workerString, w->GetFunction());
+    target->Set(workerString, w->GetFunction(env->context()).ToLocalChecked());
   }
 
   env->SetMethod(target, "getEnvMessagePort", GetEnvMessagePort);
@@ -417,7 +500,8 @@ void InitWorker(Local<Object> target,
   auto thread_id_string = FIXED_ONE_BYTE_STRING(env->isolate(), "threadId");
   target->Set(env->context(),
               thread_id_string,
-              Number::New(env->isolate(), env->thread_id())).FromJust();
+              Number::New(env->isolate(),
+                          static_cast<double>(env->thread_id()))).FromJust();
 }
 
 }  // anonymous namespace

@@ -16,6 +16,8 @@
     'node_use_v8_platform%': 'true',
     'node_use_bundled_v8%': 'true',
     'node_module_version%': '',
+    'node_with_ltcg%': '',
+    'node_use_pch%': 'false',
 
     'node_tag%': '',
     'uv_library%': 'static_library',
@@ -27,7 +29,7 @@
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.7',
+    'v8_embedder_string': '-node.2',
 
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
@@ -78,7 +80,7 @@
           ['GENERATOR == "ninja"', {
             'v8_base': '<(PRODUCT_DIR)/obj/deps/v8/gypfiles/v8_monolith.gen/gn/obj/libv8_monolith.a',
           }, {
-            'v8_base': '<(PRODUCT_DIR)/obji.target/v8_monolith/geni/gn/obj/libv8_monolith.a',
+            'v8_base': '<(PRODUCT_DIR)/obj.target/v8_monolith/geni/gn/obj/libv8_monolith.a',
           }],
         ],
       }],
@@ -146,9 +148,9 @@
             'MinimalRebuild': 'false',
             'OmitFramePointers': 'false',
             'BasicRuntimeChecks': 3, # /RTC1
+            'MultiProcessorCompilation': 'true',
             'AdditionalOptions': [
               '/bigobj', # prevent error C1128 in VS2015
-              '/MP', # compile across multiple CPUs
             ],
           },
           'VCLinkerTool': {
@@ -175,6 +177,27 @@
           ['OS!="mac" and OS!="win"', {
             'cflags': [ '-fno-omit-frame-pointer' ],
           }],
+          ['OS=="linux"', {
+            'variables': {
+              'pgo_generate': ' -fprofile-generate ',
+              'pgo_use': ' -fprofile-use -fprofile-correction ',
+              'lto': ' -flto=4 -fuse-linker-plugin -ffat-lto-objects ',
+            },
+            'conditions': [
+              ['enable_pgo_generate=="true"', {
+                'cflags': ['<(pgo_generate)'],
+                'ldflags': ['<(pgo_generate)'],
+              },],
+              ['enable_pgo_use=="true"', {
+                'cflags': ['<(pgo_use)'],
+                'ldflags': ['<(pgo_use)'],
+              },],
+              ['enable_lto=="true"', {
+                'cflags': ['<(lto)'],
+                'ldflags': ['<(lto)'],
+              },],
+            ],
+          },],
           ['OS == "android"', {
             'cflags': [ '-fPIE' ],
             'ldflags': [ '-fPIE', '-pie' ]
@@ -192,6 +215,35 @@
                 'RuntimeLibrary': 0 # MultiThreaded (/MT)
               }
             }
+          }],
+          ['node_with_ltcg=="true"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'WholeProgramOptimization': 'true' # /GL, whole program optimization, needed for LTCG
+              },
+              'VCLibrarianTool': {
+                'AdditionalOptions': [
+                  '/LTCG:INCREMENTAL', # link time code generation
+                ]
+              },
+              'VCLinkerTool': {
+                'OptimizeReferences': 2, # /OPT:REF
+                'EnableCOMDATFolding': 2, # /OPT:ICF
+                'LinkIncremental': 1, # disable incremental linking
+                'AdditionalOptions': [
+                  '/LTCG:INCREMENTAL', # incremental link-time code generation
+                ]
+              }
+            }
+          }, {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'WholeProgramOptimization': 'false'
+              },
+              'VCLinkerTool': {
+                'LinkIncremental': 2 # enable incremental linking
+              }
+            }
           }]
         ],
         'msvs_settings': {
@@ -199,29 +251,15 @@
             'Optimization': 3, # /Ox, full optimization
             'FavorSizeOrSpeed': 1, # /Ot, favor speed over size
             'InlineFunctionExpansion': 2, # /Ob2, inline anything eligible
-            'WholeProgramOptimization': 'true', # /GL, whole program optimization, needed for LTCG
             'OmitFramePointers': 'true',
             'EnableFunctionLevelLinking': 'true',
             'EnableIntrinsicFunctions': 'true',
             'RuntimeTypeInfo': 'false',
+            'MultiProcessorCompilation': 'true',
             'AdditionalOptions': [
-              '/MP', # compile across multiple CPUs
             ],
-          },
-          'VCLibrarianTool': {
-            'AdditionalOptions': [
-              '/LTCG', # link time code generation
-            ],
-          },
-          'VCLinkerTool': {
-            'OptimizeReferences': 2, # /OPT:REF
-            'EnableCOMDATFolding': 2, # /OPT:ICF
-            'LinkIncremental': 1, # disable incremental linking
-            'AdditionalOptions': [
-              '/LTCG:INCREMENTAL', # incremental link-time code generation
-            ],
-          },
-        },
+          }
+        }
       }
     },
     # Forcibly disable -Werror.  We support a wide range of compilers, it's
@@ -231,23 +269,11 @@
     'msvs_settings': {
       'VCCLCompilerTool': {
         'StringPooling': 'true', # pool string literals
-        'DebugInformationFormat': 3, # Generate a PDB
+        'DebugInformationFormat': 1, # /Z7 embed info in .obj files
         'WarningLevel': 3,
         'BufferSecurityCheck': 'true',
         'ExceptionHandling': 0, # /EHsc
         'SuppressStartupBanner': 'true',
-        # Disable warnings:
-        # - "C4251: class needs to have dll-interface"
-        # - "C4275: non-DLL-interface used as base for DLL-interface"
-        #   Over 10k of these warnings are generated when compiling node,
-        #   originating from v8.h. Most of them are false positives.
-        #   See also: https://github.com/nodejs/node/pull/15570
-        #   TODO: re-enable when Visual Studio fixes these upstream.
-        #
-        # - "C4267: conversion from 'size_t' to 'int'"
-        #   Many any originate from our dependencies, and their sheer number
-        #   drowns out other, more legitimate warnings.
-        'DisableSpecificWarnings': ['4251', '4275', '4267'],
         'WarnAsError': 'false',
       },
       'VCLinkerTool': {
@@ -278,7 +304,20 @@
         'SuppressStartupBanner': 'true',
       },
     },
-    'msvs_disabled_warnings': [4351, 4355, 4800],
+    # Disable warnings:
+    # - "C4251: class needs to have dll-interface"
+    # - "C4275: non-DLL-interface used as base for DLL-interface"
+    #   Over 10k of these warnings are generated when compiling node,
+    #   originating from v8.h. Most of them are false positives.
+    #   See also: https://github.com/nodejs/node/pull/15570
+    #   TODO: re-enable when Visual Studio fixes these upstream.
+    #
+    # - "C4267: conversion from 'size_t' to 'int'"
+    #   Many any originate from our dependencies, and their sheer number
+    #   drowns out other, more legitimate warnings.
+    # - "C4244: conversion from 'type1' to 'type2', possible loss of data"
+    #   Ususaly safe. Disable for `dep`, enable for `src`
+    'msvs_disabled_warnings': [4351, 4355, 4800, 4251, 4275, 4244, 4267],
     'conditions': [
       ['asan == 1 and OS != "mac"', {
         'cflags+': [
@@ -419,7 +458,6 @@
           'GCC_ENABLE_CPP_EXCEPTIONS': 'NO',        # -fno-exceptions
           'GCC_ENABLE_CPP_RTTI': 'NO',              # -fno-rtti
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
-          'GCC_THREADSAFE_STATICS': 'NO',           # -fno-threadsafe-statics
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'MACOSX_DEPLOYMENT_TARGET': '10.7',       # -mmacosx-version-min=10.7
           'USE_HEADERMAP': 'NO',
@@ -463,15 +501,6 @@
         'libraries': [ '-lelf' ],
       }],
       ['OS=="freebsd"', {
-        'conditions': [
-          ['"0" < llvm_version < "4.0"', {
-            # Use this flag because on FreeBSD std::pairs copy constructor is non-trivial.
-            # Doesn't apply to llvm 4.0 (FreeBSD 11.1) or later.
-            # Refs: https://lists.freebsd.org/pipermail/freebsd-toolchain/2016-March/002094.html
-            # Refs: https://svnweb.freebsd.org/ports/head/www/node/Makefile?revision=444555&view=markup
-            'cflags': [ '-D_LIBCPP_TRIVIAL_PAIR_COPY_CTOR=1' ],
-          }],
-        ],
         'ldflags': [
           '-Wl,--export-dynamic',
         ],

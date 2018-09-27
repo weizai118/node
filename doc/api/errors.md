@@ -127,12 +127,11 @@ exactly how errors raised by those methods are propagated.
 <!--type=misc-->
 
 Most asynchronous methods exposed by the Node.js core API follow an idiomatic
-pattern referred to as an _error-first callback_ (sometimes referred to as
-a _Node.js style callback_). With this pattern, a callback function is passed
-to the method as an argument. When the operation either completes or an error
-is raised, the callback function is called with
-the `Error` object (if any) passed as the first argument. If no error was
-raised, the first argument will be passed as `null`.
+pattern referred to as an _error-first callback_. With this pattern, a callback
+function is passed to the method as an argument. When the operation either
+completes or an error is raised, the callback function is called with the
+`Error` object (if any) passed as the first argument. If no error was raised,
+the first argument will be passed as `null`.
 
 ```js
 const fs = require('fs');
@@ -457,7 +456,7 @@ added properties.
 
 ### Class: SystemError
 
-### error.info
+#### error.info
 
 `SystemError` instances may have an additional `info` property whose
 value is an object with additional details about the error conditions.
@@ -582,10 +581,12 @@ found [here][online].
 <a id="ERR_AMBIGUOUS_ARGUMENT"></a>
 ### ERR_AMBIGUOUS_ARGUMENT
 
-This is triggered by the `assert` module in case e.g.,
-`assert.throws(fn, message)` is used in a way that the message is the thrown
-error message. This is ambiguous because the message is not verifying the error
-message and will only be thrown in case no error is thrown.
+A function argument is being used in a way that suggests that the function
+signature may be misunderstood. This is thrown by the `assert` module when the
+`message` parameter in `assert.throws(block, message)` matches the error message
+thrown by `block` because that usage suggests that the user believes `message`
+is the expected message rather than the message the `AssertionError` will
+display if `block` does not throw.
 
 <a id="ERR_ARG_NOT_ITERABLE"></a>
 ### ERR_ARG_NOT_ITERABLE
@@ -728,6 +729,11 @@ be called no more than one time per instance of a `Hash` object.
 
 [`hash.update()`][] failed for any reason. This should rarely, if ever, happen.
 
+<a id="ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS"></a>
+### ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS
+
+The selected public or private key encoding is incompatible with other options.
+
 <a id="ERR_CRYPTO_INVALID_DIGEST"></a>
 ### ERR_CRYPTO_INVALID_DIGEST
 
@@ -738,6 +744,24 @@ An invalid [crypto digest algorithm][] was specified.
 
 A crypto method was used on an object that was in an invalid state. For
 instance, calling [`cipher.getAuthTag()`][] before calling `cipher.final()`.
+
+<a id="ERR_CRYPTO_PBKDF2_ERROR"></a>
+### ERR_CRYPTO_PBKDF2_ERROR
+
+The PBKDF2 algorithm failed for unspecified reasons. OpenSSL does not provide
+more details and therefore neither does Node.js.
+
+<a id="ERR_CRYPTO_SCRYPT_INVALID_PARAMETER"></a>
+### ERR_CRYPTO_SCRYPT_INVALID_PARAMETER
+
+One or more [`crypto.scrypt()`][] or [`crypto.scryptSync()`][] parameters are
+outside their legal range.
+
+<a id="ERR_CRYPTO_SCRYPT_NOT_SUPPORTED"></a>
+### ERR_CRYPTO_SCRYPT_NOT_SUPPORTED
+
+Node.js was compiled without `scrypt` support. Not possible with the official
+release binaries but can happen with custom builds, including distro builds.
 
 <a id="ERR_CRYPTO_SIGN_KEY_REQUIRED"></a>
 ### ERR_CRYPTO_SIGN_KEY_REQUIRED
@@ -775,13 +799,13 @@ The stack trace is extended to include the point in time at which the
 <a id="ERR_ENCODING_INVALID_ENCODED_DATA"></a>
 ### ERR_ENCODING_INVALID_ENCODED_DATA
 
-Data provided to `util.TextDecoder()` API was invalid according to the encoding
+Data provided to `TextDecoder()` API was invalid according to the encoding
 provided.
 
 <a id="ERR_ENCODING_NOT_SUPPORTED"></a>
 ### ERR_ENCODING_NOT_SUPPORTED
 
-Encoding provided to `util.TextDecoder()` API was not one of the
+Encoding provided to `TextDecoder()` API was not one of the
 [WHATWG Supported Encodings][].
 
 <a id="ERR_FALSY_VALUE_REJECTION"></a>
@@ -851,17 +875,16 @@ forbidden.
 For HTTP/2 requests using the `CONNECT` method, the `:scheme` pseudo-header is
 forbidden.
 
+<a id="ERR_HTTP2_ERROR"></a>
+### ERR_HTTP2_ERROR
+
+A non-specific HTTP/2 error has occurred.
+
 <a id="ERR_HTTP2_GOAWAY_SESSION"></a>
 ### ERR_HTTP2_GOAWAY_SESSION
 
 New HTTP/2 Streams may not be opened after the `Http2Session` has received a
 `GOAWAY` frame from the connected peer.
-
-<a id="ERR_HTTP2_HEADER_SINGLE_VALUE"></a>
-### ERR_HTTP2_HEADER_SINGLE_VALUE
-
-Multiple values were provided for an HTTP/2 header field that was required to
-have only a single value.
 
 <a id="ERR_HTTP2_HEADERS_AFTER_RESPOND"></a>
 ### ERR_HTTP2_HEADERS_AFTER_RESPOND
@@ -872,6 +895,12 @@ An additional headers was specified after an HTTP/2 response was initiated.
 ### ERR_HTTP2_HEADERS_SENT
 
 An attempt was made to send multiple response headers.
+
+<a id="ERR_HTTP2_HEADER_SINGLE_VALUE"></a>
+### ERR_HTTP2_HEADER_SINGLE_VALUE
+
+Multiple values were provided for an HTTP/2 header field that was required to
+have only a single value.
 
 <a id="ERR_HTTP2_INFO_STATUS_NOT_ALLOWED"></a>
 ### ERR_HTTP2_INFO_STATUS_NOT_ALLOWED
@@ -895,6 +924,11 @@ An invalid HTTP/2 header value was specified.
 
 An invalid HTTP informational status code has been specified. Informational
 status codes must be an integer between `100` and `199` (inclusive).
+
+<a id="ERR_HTTP2_INVALID_ORIGIN"></a>
+### ERR_HTTP2_INVALID_ORIGIN
+
+HTTP/2 `ORIGIN` frames require a valid origin.
 
 <a id="ERR_HTTP2_INVALID_PACKED_SETTINGS_LENGTH"></a>
 ### ERR_HTTP2_INVALID_PACKED_SETTINGS_LENGTH
@@ -934,11 +968,22 @@ required to send an acknowledgment that it has received and applied the new
 be sent at any given time. This error code is used when that limit has been
 reached.
 
+<a id="ERR_HTTP2_NESTED_PUSH"></a>
+### ERR_HTTP2_NESTED_PUSH
+
+An attempt was made to initiate a new push stream from within a push stream.
+Nested push streams are not permitted.
+
 <a id="ERR_HTTP2_NO_SOCKET_MANIPULATION"></a>
 ### ERR_HTTP2_NO_SOCKET_MANIPULATION
 
 An attempt was made to directly manipulate (read, write, pause, resume, etc.) a
 socket attached to an `Http2Session`.
+
+<a id="ERR_HTTP2_ORIGIN_LENGTH"></a>
+### ERR_HTTP2_ORIGIN_LENGTH
+
+HTTP/2 `ORIGIN` frames are limited to a length of 16382 bytes.
 
 <a id="ERR_HTTP2_OUT_OF_STREAMS"></a>
 ### ERR_HTTP2_OUT_OF_STREAMS
@@ -992,11 +1037,22 @@ provided.
 
 The `Http2Session` closed with a non-zero error code.
 
+<a id="ERR_HTTP2_SETTINGS_CANCEL"></a>
+### ERR_HTTP2_SETTINGS_CANCEL
+
+The `Http2Session` settings canceled.
+
 <a id="ERR_HTTP2_SOCKET_BOUND"></a>
 ### ERR_HTTP2_SOCKET_BOUND
 
 An attempt was made to connect a `Http2Session` object to a `net.Socket` or
 `tls.TLSSocket` that had already been bound to another `Http2Session` object.
+
+<a id="ERR_HTTP2_SOCKET_UNBOUND"></a>
+### ERR_HTTP2_SOCKET_UNBOUND
+
+An attempt was made to use the `socket` property of an `Http2Session` that
+has already been closed.
 
 <a id="ERR_HTTP2_STATUS_101"></a>
 ### ERR_HTTP2_STATUS_101
@@ -1045,11 +1101,6 @@ is set for the `Http2Stream`.
 
 `http2.connect()` was passed a URL that uses any protocol other than `http:` or
 `https:`.
-
-<a id="ERR_INDEX_OUT_OF_RANGE"></a>
-### ERR_INDEX_OUT_OF_RANGE
-
-A given index was out of the accepted range (e.g. negative offsets).
 
 <a id="ERR_INSPECTOR_ALREADY_CONNECTED"></a>
 ### ERR_INSPECTOR_ALREADY_CONNECTED
@@ -1186,25 +1237,35 @@ An invalid `options.protocol` was passed.
 Both `breakEvalOnSigint` and `eval` options were set in the REPL config, which
 is not supported.
 
+<a id="ERR_INVALID_RETURN_PROPERTY"></a>
+### ERR_INVALID_RETURN_PROPERTY
+
+Thrown in case a function option does not provide a valid value for one of its
+returned object properties on execution.
+
+<a id="ERR_INVALID_RETURN_PROPERTY_VALUE"></a>
+### ERR_INVALID_RETURN_PROPERTY_VALUE
+
+Thrown in case a function option does not provide an expected value
+type for one of its returned object properties on execution.
+
 <a id="ERR_INVALID_RETURN_VALUE"></a>
 ### ERR_INVALID_RETURN_VALUE
 
-Thrown in case a function option does not return an expected value on execution.
-For example when a function is expected to return a promise.
+Thrown in case a function option does not return an expected value
+type on execution, such as when a function is expected to return a promise.
 
 <a id="ERR_INVALID_SYNC_FORK_INPUT"></a>
 ### ERR_INVALID_SYNC_FORK_INPUT
 
-A `Buffer`, `Uint8Array` or `string` was provided as stdio input to a
-synchronous fork. See the documentation for the [`child_process`][] module
+A `Buffer`, `TypedArray`, `DataView` or `string` was provided as stdio input to
+an asynchronous fork. See the documentation for the [`child_process`][] module
 for more information.
 
 <a id="ERR_INVALID_THIS"></a>
 ### ERR_INVALID_THIS
 
 A Node.js API function was called with an incompatible `this` value.
-
-Example:
 
 ```js
 const urlSearchParams = new URLSearchParams('foo=bar&baz=new');
@@ -1294,6 +1355,14 @@ strict compliance with the API specification (which in some cases may accept
 `func(undefined)` and `func()` are treated identically, and the
 [`ERR_INVALID_ARG_TYPE`][] error code may be used instead.
 
+<a id="ERR_MISSING_DYNAMIC_INSTANTIATE_HOOK"></a>
+### ERR_MISSING_DYNAMIC_INSTANTIATE_HOOK
+
+> Stability: 1 - Experimental
+
+An [ES6 module][] loader hook specified `format: 'dynamic'` but did not provide
+a `dynamicInstantiate` hook.
+
 <a id="ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST"></a>
 ### ERR_MISSING_MESSAGE_PORT_IN_TRANSFER_LIST
 
@@ -1353,6 +1422,31 @@ multiple of the element size.
 While calling `napi_create_typedarray()`, `(length * size_of_element) +
 byte_offset` was larger than the length of given `buffer`.
 
+<a id="ERR_NAPI_TSFN_CALL_JS"></a>
+### ERR_NAPI_TSFN_CALL_JS
+
+An error occurred while invoking the JavaScript portion of the thread-safe
+function.
+
+<a id="ERR_NAPI_TSFN_GET_UNDEFINED"></a>
+### ERR_NAPI_TSFN_GET_UNDEFINED
+
+An error occurred while attempting to retrieve the JavaScript `undefined`
+value.
+
+<a id="ERR_NAPI_TSFN_START_IDLE_LOOP"></a>
+### ERR_NAPI_TSFN_START_IDLE_LOOP
+
+On the main thread, values are removed from the queue associated with the
+thread-safe function in an idle loop. This error indicates that an error
+has occurred when attempting to start the loop.
+
+<a id="ERR_NAPI_TSFN_STOP_IDLE_LOOP"></a>
+### ERR_NAPI_TSFN_STOP_IDLE_LOOP
+
+Once no more items are left in the queue, the idle loop must be suspended. This
+error indicates that the idle loop has failed to stop.
+
 <a id="ERR_NO_CRYPTO"></a>
 ### ERR_NO_CRYPTO
 
@@ -1389,6 +1483,7 @@ An attempt was made to `require()` an [ES6 module][].
 Script execution was interrupted by `SIGINT` (For example, when Ctrl+C was
 pressed).
 
+<a id="ERR_SCRIPT_EXECUTION_TIMEOUT"></a>
 ### ERR_SCRIPT_EXECUTION_TIMEOUT
 
 Script execution timed out, possibly due to bugs in the script being executed.
@@ -1421,7 +1516,7 @@ An invalid (negative) size was passed for either the `recvBufferSize` or
 <a id="ERR_SOCKET_BAD_PORT"></a>
 ### ERR_SOCKET_BAD_PORT
 
-An API function expecting a port > 0 and < 65536 received an invalid value.
+An API function expecting a port >= 0 and < 65536 received an invalid value.
 
 <a id="ERR_SOCKET_BAD_TYPE"></a>
 ### ERR_SOCKET_BAD_TYPE
@@ -1467,6 +1562,12 @@ does not allow `stdout` or `stderr` streams to be closed by user code.
 
 An attempt was made to call [`stream.pipe()`][] on a [`Writable`][] stream.
 
+<a id="ERR_STREAM_DESTROYED"></a>
+### ERR_STREAM_DESTROYED
+
+A stream method was called that cannot complete because the stream was
+destroyed using `stream.destroy()`.
+
 <a id="ERR_STREAM_NULL_VALUES"></a>
 ### ERR_STREAM_NULL_VALUES
 
@@ -1484,12 +1585,6 @@ or a pipeline ends non gracefully with no explicit error.
 An attempt was made to call [`stream.push()`][] after a `null`(EOF) had been
 pushed to the stream.
 
-<a id="ERR_STREAM_READ_NOT_IMPLEMENTED"></a>
-### ERR_STREAM_READ_NOT_IMPLEMENTED
-
-An attempt was made to use a readable stream that did not implement
-[`readable._read()`][].
-
 <a id="ERR_STREAM_UNSHIFT_AFTER_END_EVENT"></a>
 ### ERR_STREAM_UNSHIFT_AFTER_END_EVENT
 
@@ -1502,7 +1597,6 @@ emitted.
 Prevents an abort if a string decoder was set on the Socket or if the decoder
 is in `objectMode`.
 
-Example
 ```js
 const Socket = require('net').Socket;
 const instance = new Socket();
@@ -1516,24 +1610,18 @@ instance.setEncoding('utf8');
 An attempt was made to call [`stream.write()`][] after `stream.end()` has been
 called.
 
+<a id="ERR_STRING_TOO_LONG"></a>
+### ERR_STRING_TOO_LONG
+
+An attempt has been made to create a string longer than the maximum allowed
+length.
+
 <a id="ERR_SYSTEM_ERROR"></a>
 ### ERR_SYSTEM_ERROR
 
 An unspecified or non-specific system error has occurred within the Node.js
 process. The error object will have an `err.info` object property with
 additional details.
-
-<a id="ERR_STREAM_DESTROYED"></a>
-### ERR_STREAM_DESTROYED
-
-A stream method was called that cannot complete because the stream was
-destroyed using `stream.destroy()`.
-
-<a id="ERR_STRING_TOO_LONG"></a>
-### ERR_STRING_TOO_LONG
-
-An attempt has been made to create a string longer than the maximum allowed
-length.
 
 <a id="ERR_TLS_CERT_ALTNAME_INVALID"></a>
 ### ERR_TLS_CERT_ALTNAME_INVALID
@@ -1555,6 +1643,16 @@ recommended to use 2048 bits or larger for stronger security.
 A TLS/SSL handshake timed out. In this case, the server must also abort the
 connection.
 
+<a id="ERR_TLS_RENEGOTIATE"></a>
+### ERR_TLS_RENEGOTIATE
+
+An attempt to renegotiate the TLS session failed.
+
+<a id="ERR_TLS_RENEGOTIATION_DISABLED"></a>
+### ERR_TLS_RENEGOTIATION_DISABLED
+
+An attempt was made to renegotiate TLS on a socket instance with TLS disabled.
+
 <a id="ERR_TLS_REQUIRED_SERVER_NAME"></a>
 ### ERR_TLS_REQUIRED_SERVER_NAME
 
@@ -1573,11 +1671,6 @@ vector for denial-of-service attacks.
 An attempt was made to issue Server Name Indication from a TLS server-side
 socket, which is only valid from a client.
 
-<a id="ERR_TLS_RENEGOTIATION_DISABLED"></a>
-### ERR_TLS_RENEGOTIATION_DISABLED
-
-An attempt was made to renegotiate TLS on a socket instance with TLS disabled.
-
 <a id="ERR_TRACE_EVENTS_CATEGORY_REQUIRED"></a>
 ### ERR_TRACE_EVENTS_CATEGORY_REQUIRED
 
@@ -1589,6 +1682,16 @@ category.
 
 The `trace_events` module could not be loaded because Node.js was compiled with
 the `--without-v8-platform` flag.
+
+<a id="ERR_TRANSFERRING_EXTERNALIZED_SHAREDARRAYBUFFER"></a>
+### ERR_TRANSFERRING_EXTERNALIZED_SHAREDARRAYBUFFER
+
+A `SharedArrayBuffer` whose memory is not managed by the JavaScript engine
+or by Node.js was encountered during serialization. Such a `SharedArrayBuffer`
+cannot be serialized.
+
+This can only happen when native addons create `SharedArrayBuffer`s in
+"externalized" mode, or put existing `SharedArrayBuffer` into externalized mode.
 
 <a id="ERR_TRANSFORM_ALREADY_TRANSFORMING"></a>
 ### ERR_TRANSFORM_ALREADY_TRANSFORMING
@@ -1604,6 +1707,12 @@ A `Transform` stream finished with data still in the write buffer.
 ### ERR_TTY_INIT_FAILED
 
 The initialization of a TTY failed due to a system error.
+
+<a id="ERR_TTY_WRITABLE_NOT_READABLE"></a>
+### ERR_TTY_WRITABLE_NOT_READABLE
+
+This `Error` is thrown when a read is attempted on a TTY `WriteStream`,
+such as `process.stdout.on('data')`.
 
 <a id="ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET"></a>
 ### ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET
@@ -1624,6 +1733,13 @@ A string that contained unescaped characters was received.
 
 An unhandled error occurred (for instance, when an `'error'` event is emitted
 by an [`EventEmitter`][] but an `'error'` handler is not registered).
+
+<a id="ERR_UNKNOWN_BUILTIN_MODULE"></a>
+### ERR_UNKNOWN_BUILTIN_MODULE
+
+Used to identify a specific kind of internal Node.js error that should not
+typically be triggered by user code. Instances of this error point to an
+internal bug within the Node.js binary itself.
 
 <a id="ERR_UNKNOWN_CREDENTIAL"></a>
 ### ERR_UNKNOWN_CREDENTIAL
@@ -1681,11 +1797,6 @@ The V8 `BreakIterator` API was used but the full ICU data set is not installed.
 While using the Performance Timing API (`perf_hooks`), no valid performance
 entry types were found.
 
-<a id="ERR_VALUE_OUT_OF_RANGE"></a>
-### ERR_VALUE_OUT_OF_RANGE
-
-Superseded by `ERR_OUT_OF_RANGE`.
-
 <a id="ERR_VM_MODULE_ALREADY_LINKED"></a>
 ### ERR_VM_MODULE_ALREADY_LINKED
 
@@ -1715,7 +1826,7 @@ The module must be successfully linked before instantiation.
 <a id="ERR_VM_MODULE_NOT_MODULE"></a>
 ### ERR_VM_MODULE_NOT_MODULE
 
-The fulfilled value of a linking promise is not a `vm.Module` object.
+The fulfilled value of a linking promise is not a `vm.SourceTextModule` object.
 
 <a id="ERR_VM_MODULE_STATUS"></a>
 ### ERR_VM_MODULE_STATUS
@@ -1723,10 +1834,11 @@ The fulfilled value of a linking promise is not a `vm.Module` object.
 The current module's status does not allow for this operation. The specific
 meaning of the error depends on the specific function.
 
-<a id="ERR_WORKER_NEED_ABSOLUTE_PATH"></a>
-### ERR_WORKER_NEED_ABSOLUTE_PATH
+<a id="ERR_WORKER_PATH"></a>
+### ERR_WORKER_PATH
 
-The path for the main script of a worker is not an absolute path.
+The path for the main script of a worker is neither an absolute path
+nor a relative path starting with `./` or `../`.
 
 <a id="ERR_WORKER_UNSERIALIZABLE_ERROR"></a>
 ### ERR_WORKER_UNSERIALIZABLE_ERROR
@@ -1744,33 +1856,237 @@ unknown file extension.
 
 Creation of a [`zlib`][] object failed due to incorrect configuration.
 
-[`'uncaughtException'`]: process.html#process_event_uncaughtexception
+<a id="MODULE_NOT_FOUND"></a>
+### MODULE_NOT_FOUND
+
+A module file could not be resolved while attempting a [`require()`][] or
+`import` operation.
+
+## Legacy Node.js Error Codes
+
+> Stability: 0 - Deprecated. These error codes are either inconsistent, or have
+> been removed.
+
+<a id="ERR_HTTP2_FRAME_ERROR"></a>
+### ERR_HTTP2_FRAME_ERROR
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when a failure occurs sending an individual frame on the HTTP/2
+session.
+
+<a id="ERR_HTTP2_HEADERS_OBJECT"></a>
+### ERR_HTTP2_HEADERS_OBJECT
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when an HTTP/2 Headers Object is expected.
+
+<a id="ERR_HTTP2_HEADER_REQUIRED"></a>
+### ERR_HTTP2_HEADER_REQUIRED
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when a required header is missing in an HTTP/2 message.
+
+<a id="ERR_HTTP2_INFO_HEADERS_AFTER_RESPOND"></a>
+### ERR_HTTP2_INFO_HEADERS_AFTER_RESPOND
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+HTTP/2 informational headers must only be sent *prior* to calling the
+`Http2Stream.prototype.respond()` method.
+
+<a id="ERR_HTTP2_STREAM_CLOSED"></a>
+### ERR_HTTP2_STREAM_CLOSED
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when an action has been performed on an HTTP/2 Stream that has already
+been closed.
+
+<a id="ERR_HTTP_INVALID_CHAR"></a>
+### ERR_HTTP_INVALID_CHAR
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when an invalid character is found in an HTTP response status message
+(reason phrase).
+
+<a id="ERR_INDEX_OUT_OF_RANGE"></a>
+### ERR_INDEX_OUT_OF_RANGE
+<!-- YAML
+  added: v10.0.0
+  removed: REPLACEME
+-->
+A given index was out of the accepted range (e.g. negative offsets).
+
+<a id="ERR_NAPI_CONS_PROTOTYPE_OBJECT"></a>
+### ERR_NAPI_CONS_PROTOTYPE_OBJECT
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used by the `N-API` when `Constructor.prototype` is not an object.
+
+<a id="ERR_OUTOFMEMORY"></a>
+### ERR_OUTOFMEMORY
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used generically to identify that an operation caused an out of memory
+condition.
+
+<a id="ERR_PARSE_HISTORY_DATA"></a>
+### ERR_PARSE_HISTORY_DATA
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+The `repl` module was unable to parse data from the REPL history file.
+
+<a id="ERR_STREAM_READ_NOT_IMPLEMENTED"></a>
+### ERR_STREAM_READ_NOT_IMPLEMENTED
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when an attempt is made to use a readable stream that has not implemented
+[`readable._read()`][].
+
+<a id="ERR_TLS_RENEGOTIATION_FAILED"></a>
+### ERR_TLS_RENEGOTIATION_FAILED
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when a TLS renegotiation request has failed in a non-specific way.
+
+<a id="ERR_UNKNOWN_BUILTIN_MODULE"></a>
+### ERR_UNKNOWN_BUILTIN_MODULE
+<!-- YAML
+added: v8.0.0
+removed: v9.0.0
+-->
+
+The `'ERR_UNKNOWN_BUILTIN_MODULE'` error code is used to identify a specific
+kind of internal Node.js error that should not typically be triggered by user
+code. Instances of this error point to an internal bug within the Node.js
+binary itself.
+
+<a id="ERR_VALUE_OUT_OF_RANGE"></a>
+### ERR_VALUE_OUT_OF_RANGE
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when a given value is out of the accepted range.
+
+<a id="ERR_ZLIB_BINDING_CLOSED"></a>
+### ERR_ZLIB_BINDING_CLOSED
+<!-- YAML
+added: v9.0.0
+removed: v10.0.0
+-->
+
+Used when an attempt is made to use a `zlib` object after it has already been
+closed.
+
+### Other error codes
+
+These errors have never been released, but had been present on master between
+releases.
+
+<a id="ERR_FS_WATCHER_ALREADY_STARTED"></a>
+#### ERR_FS_WATCHER_ALREADY_STARTED
+
+An attempt was made to start a watcher returned by `fs.watch()` that has
+already been started.
+
+<a id="ERR_FS_WATCHER_NOT_STARTED"></a>
+#### ERR_FS_WATCHER_NOT_STARTED
+
+An attempt was made to initiate operations on a watcher returned by
+`fs.watch()` that has not yet been started.
+
+<a id="ERR_HTTP2_ALREADY_SHUTDOWN"></a>
+#### ERR_HTTP2_ALREADY_SHUTDOWN
+
+Occurs with multiple attempts to shutdown an HTTP/2 session.
+
+<a id="ERR_HTTP2_ERROR"></a>
+#### ERR_HTTP2_ERROR
+
+A non-specific HTTP/2 error has occurred.
+
+<a id="ERR_INVALID_REPL_HISTORY"></a>
+#### ERR_INVALID_REPL_HISTORY
+
+Used in the `repl` in case the old history file is used and an error occurred
+while trying to read and parse it.
+
+<a id="ERR_MISSING_DYNAMIC_INSTANTIATE_HOOK"></a>
+#### ERR_MISSING_DYNAMIC_INSTANTIATE_HOOK
+
+Used when an [ES6 module][] loader hook specifies `format: 'dynamic'` but does
+not provide a `dynamicInstantiate` hook.
+
+<a id="ERR_STREAM_HAS_STRINGDECODER"></a>
+#### ERR_STREAM_HAS_STRINGDECODER
+
+Used to prevent an abort if a string decoder was set on the Socket.
+
+```js
+const Socket = require('net').Socket;
+const instance = new Socket();
+
+instance.setEncoding('utf8');
+```
+
+<a id="ERR_STRING_TOO_LARGE"></a>
+#### ERR_STRING_TOO_LARGE
+
+An attempt has been made to create a string larger than the maximum allowed
+size.
+
 [`--force-fips`]: cli.html#cli_force_fips
+[`'uncaughtException'`]: process.html#process_event_uncaughtexception
 [`child_process`]: child_process.html
 [`cipher.getAuthTag()`]: crypto.html#crypto_cipher_getauthtag
 [`Class: assert.AssertionError`]: assert.html#assert_class_assert_assertionerror
+[`crypto.scrypt()`]: crypto.html#crypto_crypto_scrypt_password_salt_keylen_options_callback
+[`crypto.scryptSync()`]: crypto.html#crypto_crypto_scryptsync_password_salt_keylen_options
 [`crypto.timingSafeEqual()`]: crypto.html#crypto_crypto_timingsafeequal_a_b
 [`dgram.createSocket()`]: dgram.html#dgram_dgram_createsocket_options_callback
 [`ERR_INVALID_ARG_TYPE`]: #ERR_INVALID_ARG_TYPE
 [`EventEmitter`]: events.html#events_class_eventemitter
+[`fs`]: fs.html
+[`fs.readdir`]: fs.html#fs_fs_readdir_path_options_callback
+[`fs.readFileSync`]: fs.html#fs_fs_readfilesync_path_options
 [`fs.symlink()`]: fs.html#fs_fs_symlink_target_path_type_callback
 [`fs.symlinkSync()`]: fs.html#fs_fs_symlinksync_target_path_type
+[`fs.unlink`]: fs.html#fs_fs_unlink_path_callback
 [`hash.digest()`]: crypto.html#crypto_hash_digest_encoding
 [`hash.update()`]: crypto.html#crypto_hash_update_data_inputencoding
-[`readable._read()`]: stream.html#stream_readable_read_size_1
-[`server.close()`]: net.html#net_server_close_callback
-[`sign.sign()`]: crypto.html#crypto_sign_sign_privatekey_outputformat
-[`stream.pipe()`]: stream.html#stream_readable_pipe_destination_options
-[`stream.push()`]: stream.html#stream_readable_push_chunk_encoding
-[`stream.unshift()`]: stream.html#stream_readable_unshift_chunk
-[`stream.write()`]: stream.html#stream_writable_write_chunk_encoding_callback
-[`Writable`]: stream.html#stream_class_stream_writable
-[`subprocess.kill()`]: child_process.html#child_process_subprocess_kill_signal
-[`subprocess.send()`]: child_process.html#child_process_subprocess_send_message_sendhandle_options_callback
-[`fs.readFileSync`]: fs.html#fs_fs_readfilesync_path_options
-[`fs.readdir`]: fs.html#fs_fs_readdir_path_options_callback
-[`fs.unlink`]: fs.html#fs_fs_unlink_path_callback
-[`fs`]: fs.html
 [`http`]: http.html
 [`https`]: https.html
 [`libuv Error handling`]: http://docs.libuv.org/en/v1.x/errors.html
@@ -1779,8 +2095,19 @@ Creation of a [`zlib`][] object failed due to incorrect configuration.
 [`new URLSearchParams(iterable)`]: url.html#url_constructor_new_urlsearchparams_iterable
 [`process.send()`]: process.html#process_process_send_message_sendhandle_options_callback
 [`process.setUncaughtExceptionCaptureCallback()`]: process.html#process_process_setuncaughtexceptioncapturecallback_fn
+[`readable._read()`]: stream.html#stream_readable_read_size_1
+[`require()`]: modules.html#modules_require
 [`require('crypto').setEngine()`]: crypto.html#crypto_crypto_setengine_engine_flags
 [`server.listen()`]: net.html#net_server_listen
+[`server.close()`]: net.html#net_server_close_callback
+[`sign.sign()`]: crypto.html#crypto_sign_sign_privatekey_outputformat
+[`stream.pipe()`]: stream.html#stream_readable_pipe_destination_options
+[`stream.push()`]: stream.html#stream_readable_push_chunk_encoding
+[`stream.unshift()`]: stream.html#stream_readable_unshift_chunk
+[`stream.write()`]: stream.html#stream_writable_write_chunk_encoding_callback
+[`subprocess.kill()`]: child_process.html#child_process_subprocess_kill_signal
+[`subprocess.send()`]: child_process.html#child_process_subprocess_send_message_sendhandle_options_callback
+[`Writable`]: stream.html#stream_class_stream_writable
 [`zlib`]: zlib.html
 [ES6 module]: esm.html
 [Node.js Error Codes]: #nodejs-error-codes

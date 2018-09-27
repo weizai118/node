@@ -52,17 +52,20 @@ class SignalWrap : public HandleWrap {
     constructor->SetClassName(signalString);
 
     AsyncWrap::AddWrapMethods(env, constructor);
-    env->SetProtoMethod(constructor, "close", HandleWrap::Close);
-    env->SetProtoMethod(constructor, "ref", HandleWrap::Ref);
-    env->SetProtoMethod(constructor, "unref", HandleWrap::Unref);
-    env->SetProtoMethod(constructor, "hasRef", HandleWrap::HasRef);
+    HandleWrap::AddWrapMethods(env, constructor);
+
     env->SetProtoMethod(constructor, "start", Start);
     env->SetProtoMethod(constructor, "stop", Stop);
 
-    target->Set(signalString, constructor->GetFunction());
+    target->Set(signalString,
+                constructor->GetFunction(env->context()).ToLocalChecked());
   }
 
-  size_t self_size() const override { return sizeof(*this); }
+  void MemoryInfo(MemoryTracker* tracker) const override {
+    tracker->TrackThis(this);
+  }
+
+  ADD_MEMORY_INFO_NAME(SignalWrap)
 
  private:
   static void New(const FunctionCallbackInfo<Value>& args) {
@@ -86,11 +89,13 @@ class SignalWrap : public HandleWrap {
   static void Start(const FunctionCallbackInfo<Value>& args) {
     SignalWrap* wrap;
     ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
-    int signum = args[0]->Int32Value();
+    Environment* env = wrap->env();
+    int signum;
+    if (!args[0]->Int32Value(env->context()).To(&signum)) return;
 #if defined(__POSIX__) && HAVE_INSPECTOR
     if (signum == SIGPROF) {
       Environment* env = Environment::GetCurrent(args);
-      if (env->inspector_agent()->IsStarted()) {
+      if (env->inspector_agent()->IsListening()) {
         ProcessEmitWarning(env,
                            "process.on(SIGPROF) is reserved while debugging");
         return;
@@ -126,4 +131,4 @@ class SignalWrap : public HandleWrap {
 }  // namespace node
 
 
-NODE_BUILTIN_MODULE_CONTEXT_AWARE(signal_wrap, node::SignalWrap::Initialize)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(signal_wrap, node::SignalWrap::Initialize)

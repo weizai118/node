@@ -21,6 +21,7 @@ using v8::MaybeLocal;
 using v8::NewStringType;
 using v8::Object;
 using v8::String;
+using v8::Uint32;
 using v8::Value;
 
 using v8_inspector::StringBuffer;
@@ -66,7 +67,7 @@ class JSBindingsConnection : public AsyncWrap {
                          callback_(env->isolate(), callback) {
     Agent* inspector = env->inspector_agent();
     session_ = inspector->Connect(std::unique_ptr<JSBindingsSessionDelegate>(
-        new JSBindingsSessionDelegate(env, this)));
+        new JSBindingsSessionDelegate(env, this)), false);
   }
 
   void OnMessage(Local<Value> value) {
@@ -103,7 +104,13 @@ class JSBindingsConnection : public AsyncWrap {
     }
   }
 
-  size_t self_size() const override { return sizeof(*this); }
+  void MemoryInfo(MemoryTracker* tracker) const override {
+    tracker->TrackThis(this);
+    tracker->TrackField("callback", callback_);
+    tracker->TrackFieldWithSize("session", sizeof(*session_));
+  }
+
+  ADD_MEMORY_INFO_NAME(JSBindingsConnection)
 
  private:
   std::unique_ptr<InspectorSession> session_;
@@ -112,7 +119,7 @@ class JSBindingsConnection : public AsyncWrap {
 
 static bool InspectorEnabled(Environment* env) {
   Agent* agent = env->inspector_agent();
-  return agent->io() != nullptr || agent->HasConnectedSessions();
+  return agent->IsActive();
 }
 
 void AddCommandLineAPI(const FunctionCallbackInfo<Value>& info) {
@@ -131,11 +138,7 @@ void CallAndPauseOnStart(const FunctionCallbackInfo<v8::Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   CHECK_GT(args.Length(), 1);
   CHECK(args[0]->IsFunction());
-  std::vector<v8::Local<v8::Value>> call_args;
-  for (int i = 2; i < args.Length(); i++) {
-    call_args.push_back(args[i]);
-  }
-
+  SlicedArguments call_args(args, /* start */ 2);
   env->inspector_agent()->PauseOnNextJavascriptStatement("Break on start");
   v8::MaybeLocal<v8::Value> retval =
       args[0].As<v8::Function>()->Call(env->context(), args[1],
@@ -146,15 +149,11 @@ void CallAndPauseOnStart(const FunctionCallbackInfo<v8::Value>& args) {
 }
 
 void InspectorConsoleCall(const FunctionCallbackInfo<Value>& info) {
-  Isolate* isolate = info.GetIsolate();
-  HandleScope handle_scope(isolate);
+  Environment* env = Environment::GetCurrent(info);
+  Isolate* isolate = env->isolate();
   Local<Context> context = isolate->GetCurrentContext();
   CHECK_LT(2, info.Length());
-  std::vector<Local<Value>> call_args;
-  for (int i = 3; i < info.Length(); ++i) {
-    call_args.push_back(info[i]);
-  }
-  Environment* env = Environment::GetCurrent(isolate);
+  SlicedArguments call_args(info, /* start */ 3);
   if (InspectorEnabled(env)) {
     Local<Value> inspector_method = info[0];
     CHECK(inspector_method->IsFunction());
@@ -242,20 +241,21 @@ void Open(const FunctionCallbackInfo<Value>& args) {
   bool wait_for_connect = false;
 
   if (args.Length() > 0 && args[0]->IsUint32()) {
-    uint32_t port = args[0]->Uint32Value();
-    agent->options().set_port(static_cast<int>(port));
+    uint32_t port = args[0].As<Uint32>()->Value();
+    agent->options()->host_port.port = port;
   }
 
   if (args.Length() > 1 && args[1]->IsString()) {
     Utf8Value host(env->isolate(), args[1].As<String>());
-    agent->options().set_host_name(*host);
+    agent->options()->host_port.host_name = *host;
   }
 
   if (args.Length() > 2 && args[2]->IsBoolean()) {
     wait_for_connect = args[2]->BooleanValue(env->context()).FromJust();
   }
-
-  agent->StartIoThread(wait_for_connect);
+  agent->StartIoThread();
+  if (wait_for_connect)
+    agent->WaitForConnect();
 }
 
 void Url(const FunctionCallbackInfo<Value>& args) {
@@ -286,10 +286,10 @@ void Initialize(Local<Object> target, Local<Value> unused,
   Agent* agent = env->inspector_agent();
   env->SetMethod(target, "consoleCall", InspectorConsoleCall);
   env->SetMethod(target, "addCommandLineAPI", AddCommandLineAPI);
-  if (agent->IsWaitingForConnect())
+  if (agent->WillWaitForConnect())
     env->SetMethod(target, "callAndPauseOnStart", CallAndPauseOnStart);
   env->SetMethod(target, "open", Open);
-  env->SetMethod(target, "url", Url);
+  env->SetMethodNoSideEffect(target, "url", Url);
 
   env->SetMethod(target, "asyncTaskScheduled", AsyncTaskScheduledWrapper);
   env->SetMethod(target, "asyncTaskCanceled",
@@ -300,7 +300,7 @@ void Initialize(Local<Object> target, Local<Value> unused,
       InvokeAsyncTaskFnWithId<&Agent::AsyncTaskFinished>);
 
   env->SetMethod(target, "registerAsyncHook", RegisterAsyncHookWrapper);
-  env->SetMethod(target, "isEnabled", IsEnabled);
+  env->SetMethodNoSideEffect(target, "isEnabled", IsEnabled);
 
   auto conn_str = FIXED_ONE_BYTE_STRING(env->isolate(), "Connection");
   Local<FunctionTemplate> tmpl =
@@ -310,7 +310,10 @@ void Initialize(Local<Object> target, Local<Value> unused,
   AsyncWrap::AddWrapMethods(env, tmpl);
   env->SetProtoMethod(tmpl, "dispatch", JSBindingsConnection::Dispatch);
   env->SetProtoMethod(tmpl, "disconnect", JSBindingsConnection::Disconnect);
-  target->Set(env->context(), conn_str, tmpl->GetFunction()).ToChecked();
+  target
+      ->Set(env->context(), conn_str,
+            tmpl->GetFunction(env->context()).ToLocalChecked())
+      .ToChecked();
 }
 
 }  // namespace

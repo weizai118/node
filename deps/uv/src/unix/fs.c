@@ -43,7 +43,6 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <utime.h>
 #include <poll.h>
 
 #if defined(__DragonFly__)        ||                                      \
@@ -65,6 +64,10 @@
 #elif defined(__linux__) && !defined(FICLONE)
 # include <sys/ioctl.h>
 # define FICLONE _IOW(0x94, 9, int)
+#endif
+
+#if defined(_AIX) && !defined(_AIX71)
+# include <utime.h>
 #endif
 
 #define INIT(subtype)                                                         \
@@ -120,7 +123,11 @@
   do {                                                                        \
     if (cb != NULL) {                                                         \
       uv__req_register(loop, req);                                            \
-      uv__work_submit(loop, &req->work_req, uv__fs_work, uv__fs_done);        \
+      uv__work_submit(loop,                                                   \
+                      &req->work_req,                                         \
+                      UV__WORK_FAST_IO,                                       \
+                      uv__fs_work,                                            \
+                      uv__fs_done);                                           \
       return 0;                                                               \
     }                                                                         \
     else {                                                                    \
@@ -165,59 +172,17 @@ static ssize_t uv__fs_fdatasync(uv_fs_t* req) {
 
 
 static ssize_t uv__fs_futime(uv_fs_t* req) {
-#if defined(__linux__)
+#if defined(__linux__)                                                        \
+    || defined(_AIX71)
   /* utimesat() has nanosecond resolution but we stick to microseconds
    * for the sake of consistency with other platforms.
    */
-  static int no_utimesat;
   struct timespec ts[2];
-  struct timeval tv[2];
-  char path[sizeof("/proc/self/fd/") + 3 * sizeof(int)];
-  int r;
-
-  if (no_utimesat)
-    goto skip;
-
   ts[0].tv_sec  = req->atime;
   ts[0].tv_nsec = (uint64_t)(req->atime * 1000000) % 1000000 * 1000;
   ts[1].tv_sec  = req->mtime;
   ts[1].tv_nsec = (uint64_t)(req->mtime * 1000000) % 1000000 * 1000;
-
-  r = uv__utimesat(req->file, NULL, ts, 0);
-  if (r == 0)
-    return r;
-
-  if (errno != ENOSYS)
-    return r;
-
-  no_utimesat = 1;
-
-skip:
-
-  tv[0].tv_sec  = req->atime;
-  tv[0].tv_usec = (uint64_t)(req->atime * 1000000) % 1000000;
-  tv[1].tv_sec  = req->mtime;
-  tv[1].tv_usec = (uint64_t)(req->mtime * 1000000) % 1000000;
-  snprintf(path, sizeof(path), "/proc/self/fd/%d", (int) req->file);
-
-  r = utimes(path, tv);
-  if (r == 0)
-    return r;
-
-  switch (errno) {
-  case ENOENT:
-    if (fcntl(req->file, F_GETFL) == -1 && errno == EBADF)
-      break;
-    /* Fall through. */
-
-  case EACCES:
-  case ENOTDIR:
-    errno = ENOSYS;
-    break;
-  }
-
-  return r;
-
+  return futimens(req->file, ts);
 #elif defined(__APPLE__)                                                      \
     || defined(__DragonFly__)                                                 \
     || defined(__FreeBSD__)                                                   \
@@ -235,13 +200,6 @@ skip:
 # else
   return futimes(req->file, tv);
 # endif
-#elif defined(_AIX71)
-  struct timespec ts[2];
-  ts[0].tv_sec  = req->atime;
-  ts[0].tv_nsec = (uint64_t)(req->atime * 1000000) % 1000000 * 1000;
-  ts[1].tv_sec  = req->mtime;
-  ts[1].tv_nsec = (uint64_t)(req->mtime * 1000000) % 1000000 * 1000;
-  return futimens(req->file, ts);
 #elif defined(__MVS__)
   attrib_t atr;
   memset(&atr, 0, sizeof(atr));
@@ -698,10 +656,48 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
 
 
 static ssize_t uv__fs_utime(uv_fs_t* req) {
+#if defined(__linux__)                                                         \
+    || defined(_AIX71)                                                         \
+    || defined(__sun)
+  /* utimesat() has nanosecond resolution but we stick to microseconds
+   * for the sake of consistency with other platforms.
+   */
+  struct timespec ts[2];
+  ts[0].tv_sec  = req->atime;
+  ts[0].tv_nsec = (uint64_t)(req->atime * 1000000) % 1000000 * 1000;
+  ts[1].tv_sec  = req->mtime;
+  ts[1].tv_nsec = (uint64_t)(req->mtime * 1000000) % 1000000 * 1000;
+  return utimensat(AT_FDCWD, req->path, ts, 0);
+#elif defined(__APPLE__)                                                      \
+    || defined(__DragonFly__)                                                 \
+    || defined(__FreeBSD__)                                                   \
+    || defined(__FreeBSD_kernel__)                                            \
+    || defined(__NetBSD__)                                                    \
+    || defined(__OpenBSD__)
+  struct timeval tv[2];
+  tv[0].tv_sec  = req->atime;
+  tv[0].tv_usec = (uint64_t)(req->atime * 1000000) % 1000000;
+  tv[1].tv_sec  = req->mtime;
+  tv[1].tv_usec = (uint64_t)(req->mtime * 1000000) % 1000000;
+  return utimes(req->path, tv);
+#elif defined(_AIX)                                                           \
+    && !defined(_AIX71)
   struct utimbuf buf;
   buf.actime = req->atime;
   buf.modtime = req->mtime;
-  return utime(req->path, &buf); /* TODO use utimes() where available */
+  return utime(req->path, &buf);
+#elif defined(__MVS__)
+  attrib_t atr;
+  memset(&atr, 0, sizeof(atr));
+  atr.att_mtimechg = 1;
+  atr.att_atimechg = 1;
+  atr.att_mtime = req->mtime;
+  atr.att_atime = req->atime;
+  return __lchattr(req->path, &atr, sizeof(atr));
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
 }
 
 
@@ -865,9 +861,11 @@ static ssize_t uv__fs_copyfile(uv_fs_t* req) {
       /* If an error occurred that the sendfile fallback also won't handle, or
          this is a force clone then exit. Otherwise, fall through to try using
          sendfile(). */
-      if ((errno != ENOTTY && errno != EOPNOTSUPP && errno != EXDEV) ||
-          req->flags & UV_FS_COPYFILE_FICLONE_FORCE) {
-        err = -errno;
+      if (errno != ENOTTY && errno != EOPNOTSUPP && errno != EXDEV) {
+        err = UV__ERR(errno);
+        goto out;
+      } else if (req->flags & UV_FS_COPYFILE_FICLONE_FORCE) {
+        err = UV_ENOTSUP;
         goto out;
       }
     } else {
@@ -927,7 +925,11 @@ out:
     }
   }
 
-  return result;
+  if (result == 0)
+    return 0;
+
+  errno = UV__ERR(result);
+  return -1;
 #endif
 }
 
@@ -1114,6 +1116,7 @@ static void uv__fs_work(struct uv__work* w) {
     X(COPYFILE, uv__fs_copyfile(req));
     X(FCHMOD, fchmod(req->file, req->mode));
     X(FCHOWN, fchown(req->file, req->uid, req->gid));
+    X(LCHOWN, lchown(req->path, req->uid, req->gid));
     X(FDATASYNC, uv__fs_fdatasync(req));
     X(FSTAT, uv__fs_fstat(req->file, &req->statbuf));
     X(FSYNC, uv__fs_fsync(req));
@@ -1234,6 +1237,20 @@ int uv_fs_fchown(uv_loop_t* loop,
                  uv_fs_cb cb) {
   INIT(FCHOWN);
   req->file = file;
+  req->uid = uid;
+  req->gid = gid;
+  POST;
+}
+
+
+int uv_fs_lchown(uv_loop_t* loop,
+                 uv_fs_t* req,
+                 const char* path,
+                 uv_uid_t uid,
+                 uv_gid_t gid,
+                 uv_fs_cb cb) {
+  INIT(LCHOWN);
+  PATH;
   req->uid = uid;
   req->gid = gid;
   POST;

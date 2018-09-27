@@ -26,7 +26,6 @@
 #include "node_crypto_bio.h"  // NodeBIO
 // ClientHelloParser
 #include "node_crypto_clienthello-inl.h"
-#include "node_counters.h"
 #include "node_internals.h"
 #include "stream_base-inl.h"
 #include "util-inl.h"
@@ -60,8 +59,6 @@ TLSWrap::TLSWrap(Environment* env,
       SSLWrap<TLSWrap>(env, sc, kind),
       StreamBase(env),
       sc_(sc),
-      enc_in_(nullptr),
-      enc_out_(nullptr),
       write_size_(0),
       started_(false),
       established_(false),
@@ -86,8 +83,6 @@ TLSWrap::TLSWrap(Environment* env,
 
 
 TLSWrap::~TLSWrap() {
-  enc_in_ = nullptr;
-  enc_out_ = nullptr;
   sc_ = nullptr;
 }
 
@@ -112,11 +107,9 @@ void TLSWrap::NewSessionDoneCb() {
 
 
 void TLSWrap::InitSSL() {
-  // Initialize SSL
-  enc_in_ = crypto::NodeBIO::New();
-  enc_out_ = crypto::NodeBIO::New();
-  crypto::NodeBIO::FromBIO(enc_in_)->AssignEnvironment(env());
-  crypto::NodeBIO::FromBIO(enc_out_)->AssignEnvironment(env());
+  // Initialize SSL – OpenSSL takes ownership of these.
+  enc_in_ = crypto::NodeBIO::New(env()).release();
+  enc_out_ = crypto::NodeBIO::New(env()).release();
 
   SSL_set_bio(ssl_.get(), enc_in_, enc_out_);
 
@@ -131,12 +124,10 @@ void TLSWrap::InitSSL() {
   SSL_set_app_data(ssl_.get(), this);
   SSL_set_info_callback(ssl_.get(), SSLInfoCallback);
 
-#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   if (is_server()) {
     SSL_CTX_set_tlsext_servername_callback(sc_->ctx_.get(),
                                            SelectSNIContextCallback);
   }
-#endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 
   ConfigureSecureContext(sc_);
 
@@ -290,8 +281,6 @@ void TLSWrap::EncOut() {
     InvokeQueued(res.err);
     return;
   }
-
-  NODE_COUNT_NET_BYTES_SENT(write_size_);
 
   if (!res.async) {
     HandleScope handle_scope(env()->isolate());
@@ -622,8 +611,10 @@ int TLSWrap::DoWrite(WriteWrap* w,
   if (i != count) {
     int err;
     Local<Value> arg = GetSSLError(written, &err, &error_);
-    if (!arg.IsEmpty())
+    if (!arg.IsEmpty()) {
+      current_write_ = nullptr;
       return UV_EPROTO;
+    }
 
     pending_cleartext_input_.insert(pending_cleartext_input_.end(),
                                     &bufs[i],
@@ -758,6 +749,8 @@ void TLSWrap::DestroySSL(const FunctionCallbackInfo<Value>& args) {
 
   // Destroy the SSL structure and friends
   wrap->SSLWrap<TLSWrap>::DestroySSL();
+  wrap->enc_in_ = nullptr;
+  wrap->enc_out_ = nullptr;
 
   if (wrap->stream_ != nullptr)
     wrap->stream_->RemoveStreamListener(wrap);
@@ -777,7 +770,6 @@ void TLSWrap::OnClientHelloParseEnd(void* arg) {
 }
 
 
-#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 void TLSWrap::GetServername(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
@@ -809,10 +801,8 @@ void TLSWrap::SetServername(const FunctionCallbackInfo<Value>& args) {
 
   CHECK_NOT_NULL(wrap->ssl_);
 
-#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   node::Utf8Value servername(env->isolate(), args[0].As<String>());
   SSL_set_tlsext_host_name(wrap->ssl_.get(), *servername);
-#endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 }
 
 
@@ -851,7 +841,6 @@ int TLSWrap::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
   p->SetSNIContext(sc);
   return SSL_TLSEXT_ERR_OK;
 }
-#endif  // SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
 
 
 void TLSWrap::GetWriteQueueSize(const FunctionCallbackInfo<Value>& info) {
@@ -865,6 +854,17 @@ void TLSWrap::GetWriteQueueSize(const FunctionCallbackInfo<Value>& info) {
 
   uint32_t write_queue_size = BIO_pending(wrap->enc_out_);
   info.GetReturnValue().Set(write_queue_size);
+}
+
+
+void TLSWrap::MemoryInfo(MemoryTracker* tracker) const {
+  tracker->TrackThis(this);
+  tracker->TrackField("error", error_);
+  tracker->TrackField("pending_cleartext_input", pending_cleartext_input_);
+  if (enc_in_ != nullptr)
+    tracker->TrackField("enc_in", crypto::NodeBIO::FromBIO(enc_in_));
+  if (enc_out_ != nullptr)
+    tracker->TrackField("enc_out", crypto::NodeBIO::FromBIO(enc_out_));
 }
 
 
@@ -899,19 +899,18 @@ void TLSWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "destroySSL", DestroySSL);
   env->SetProtoMethod(t, "enableCertCb", EnableCertCb);
 
-  StreamBase::AddMethods<TLSWrap>(env, t, StreamBase::kFlagHasWritev);
+  StreamBase::AddMethods<TLSWrap>(env, t);
   SSLWrap<TLSWrap>::AddMethods(env, t);
 
-#ifdef SSL_CTRL_SET_TLSEXT_SERVERNAME_CB
   env->SetProtoMethod(t, "getServername", GetServername);
   env->SetProtoMethod(t, "setServername", SetServername);
-#endif  // SSL_CRT_SET_TLSEXT_SERVERNAME_CB
 
-  env->set_tls_wrap_constructor_function(t->GetFunction());
+  env->set_tls_wrap_constructor_function(
+      t->GetFunction(env->context()).ToLocalChecked());
 
-  target->Set(tlsWrapString, t->GetFunction());
+  target->Set(tlsWrapString, t->GetFunction(env->context()).ToLocalChecked());
 }
 
 }  // namespace node
 
-NODE_BUILTIN_MODULE_CONTEXT_AWARE(tls_wrap, node::TLSWrap::Initialize)
+NODE_MODULE_CONTEXT_AWARE_INTERNAL(tls_wrap, node::TLSWrap::Initialize)

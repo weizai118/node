@@ -72,11 +72,11 @@ void Method(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(String::NewFromUtf8(isolate, "world"));
 }
 
-void init(Local<Object> exports) {
+void Initialize(Local<Object> exports) {
   NODE_SET_METHOD(exports, "hello", Method);
 }
 
-NODE_MODULE(NODE_GYP_MODULE_NAME, init)
+NODE_MODULE(NODE_GYP_MODULE_NAME, Initialize)
 
 }  // namespace demo
 ```
@@ -95,8 +95,142 @@ There is no semi-colon after `NODE_MODULE` as it's not a function (see
 The `module_name` must match the filename of the final binary (excluding
 the `.node` suffix).
 
-In the `hello.cc` example, then, the initialization function is `init` and the
-Addon module name is `addon`.
+In the `hello.cc` example, then, the initialization function is `Initialize`
+and the addon module name is `addon`.
+
+When building addons with `node-gyp`, using the macro `NODE_GYP_MODULE_NAME` as
+the first parameter of `NODE_MODULE()` will ensure that the name of the final
+binary will be passed to `NODE_MODULE()`.
+
+### Context-aware addons
+
+There are environments in which Node.js addons may need to be loaded multiple
+times in multiple contexts. For example, the [Electron][] runtime runs multiple
+instances of Node.js in a single process. Each instance will have its own
+`require()` cache, and thus each instance will need a native addon to behave
+correctly when loaded via `require()`. From the addon's perspective, this means
+that it must support multiple initializations.
+
+A context-aware addon can be constructed by using the macro
+`NODE_MODULE_INITIALIZER`, which expands to the name of a function which Node.js
+will expect to find when it loads an addon. An addon can thus be initialized as
+in the following example:
+
+```cpp
+using namespace v8;
+
+extern "C" NODE_MODULE_EXPORT void
+NODE_MODULE_INITIALIZER(Local<Object> exports,
+                        Local<Value> module,
+                        Local<Context> context) {
+  /* Perform addon initialization steps here. */
+}
+```
+
+Another option is to use the macro `NODE_MODULE_INIT()`, which will also
+construct a context-aware addon. Unlike `NODE_MODULE()`, which is used to
+construct an addon around a given addon initializer function,
+`NODE_MODULE_INIT()` serves as the declaration of such an initializer to be
+followed by a function body.
+
+The following three variables may be used inside the function body following an
+invocation of `NODE_MODULE_INIT()`:
+* `Local<Object> exports`,
+* `Local<Value> module`, and
+* `Local<Context> context`
+
+The choice to build a context-aware addon carries with it the responsibility of
+carefully managing global static data. Since the addon may be loaded multiple
+times, potentially even from different threads, any global static data stored
+in the addon must be properly protected, and must not contain any persistent
+references to JavaScript objects. The reason for this is that JavaScript
+objects are only valid in one context, and will likely cause a crash when
+accessed from the wrong context or from a different thread than the one on which
+they were created.
+
+The context-aware addon can be structured to avoid global static data by
+performing the following steps:
+* defining a class which will hold per-addon-instance data. Such
+a class should include a `v8::Persistent<v8::Object>` which will hold a weak
+reference to the addon's `exports` object. The callback associated with the weak
+reference will then destroy the instance of the class.
+* constructing an instance of this class in the addon initializer such that the
+`v8::Persistent<v8::Object>` is set to the `exports` object.
+* storing the instance of the class in a `v8::External`, and
+* passing the `v8::External` to all methods exposed to JavaScript by passing it
+to the `v8::FunctionTemplate` constructor which creates the native-backed
+JavaScript functions. The `v8::FunctionTemplate` constructor's third parameter
+accepts the `v8::External`.
+
+This will ensure that the per-addon-instance data reaches each binding that can
+be called from JavaScript. The per-addon-instance data must also be passed into
+any asynchronous callbacks the addon may create.
+
+The following example illustrates the implementation of a context-aware addon:
+
+```cpp
+#include <node.h>
+
+using namespace v8;
+
+class AddonData {
+ public:
+  AddonData(Isolate* isolate, Local<Object> exports):
+      call_count(0) {
+    // Link the existence of this object instance to the existence of exports.
+    exports_.Reset(isolate, exports);
+    exports_.SetWeak(this, DeleteMe, WeakCallbackType::kParameter);
+  }
+
+  ~AddonData() {
+    if (!exports_.IsEmpty()) {
+      // Reset the reference to avoid leaking data.
+      exports_.ClearWeak();
+      exports_.Reset();
+    }
+  }
+
+  // Per-addon data.
+  int call_count;
+
+ private:
+  // Method to call when "exports" is about to be garbage-collected.
+  static void DeleteMe(const WeakCallbackInfo<AddonData>& info) {
+    delete info.GetParameter();
+  }
+
+  // Weak handle to the "exports" object. An instance of this class will be
+  // destroyed along with the exports object to which it is weakly bound.
+  v8::Persistent<v8::Object> exports_;
+};
+
+static void Method(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  // Retrieve the per-addon-instance data.
+  AddonData* data =
+      reinterpret_cast<AddonData*>(info.Data().As<External>()->Value());
+  data->call_count++;
+  info.GetReturnValue().Set((double)data->call_count);
+}
+
+// Initialize this addon to be context-aware.
+NODE_MODULE_INIT(/* exports, module, context */) {
+  Isolate* isolate = context->GetIsolate();
+
+  // Create a new instance of AddonData for this instance of the addon.
+  AddonData* data = new AddonData(isolate, exports);
+  // Wrap the data in a v8::External so we can pass it to the method we expose.
+  Local<External> external = External::New(isolate, data);
+
+  // Expose the method "Method" to JavaScript, and make sure it receives the
+  // per-addon-instance data we created above by passing `external` as the
+  // third parameter to the FunctionTemplate constructor.
+  exports->Set(context,
+               String::NewFromUtf8(isolate, "method", NewStringType::kNormal)
+                  .ToLocalChecked(),
+               FunctionTemplate::New(isolate, Method, external)
+                  ->GetFunction(context).ToLocalChecked()).FromJust();
+}
+```
 
 ### Building
 
@@ -233,6 +367,10 @@ set of APIs that are used by the native code. Instead of using the V8
 or [Native Abstractions for Node.js][] APIs, the functions available
 in the N-API are used.
 
+Creating and maintaining an addon that benefits from the ABI stability
+provided by N-API carries with it certain
+[implementation considerations](n-api.html#n_api_implications_of_abi_stability).
+
 To use N-API in the above "Hello world" example, replace the content of
 `hello.cc` with the following. All other instructions remain the same.
 
@@ -353,7 +491,8 @@ void Add(const FunctionCallbackInfo<Value>& args) {
   }
 
   // Perform the operation
-  double value = args[0]->NumberValue() + args[1]->NumberValue();
+  double value =
+      args[0].As<Number>()->Value() + args[1].As<Number>()->Value();
   Local<Number> num = Number::New(isolate, value);
 
   // Set the return value (using the passed in
@@ -459,7 +598,7 @@ void CreateObject(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
   Local<Object> obj = Object::New(isolate);
-  obj->Set(String::NewFromUtf8(isolate, "msg"), args[0]->ToString());
+  obj->Set(String::NewFromUtf8(isolate, "msg"), args[0]->ToString(isolate));
 
   args.GetReturnValue().Set(obj);
 }
@@ -496,6 +635,7 @@ functions and returning those back to JavaScript:
 
 namespace demo {
 
+using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
@@ -513,8 +653,9 @@ void MyFunction(const FunctionCallbackInfo<Value>& args) {
 void CreateFunction(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
+  Local<Context> context = isolate->GetCurrentContext();
   Local<FunctionTemplate> tpl = FunctionTemplate::New(isolate, MyFunction);
-  Local<Function> fn = tpl->GetFunction();
+  Local<Function> fn = tpl->GetFunction(context).ToLocalChecked();
 
   // omit this to make it anonymous
   fn->SetName(String::NewFromUtf8(isolate, "theFunction"));
@@ -638,17 +779,20 @@ void MyObject::Init(Local<Object> exports) {
   // Prototype
   NODE_SET_PROTOTYPE_METHOD(tpl, "plusOne", PlusOne);
 
-  constructor.Reset(isolate, tpl->GetFunction());
+  Local<Context> context = isolate->GetCurrentContext();
+  constructor.Reset(isolate, tpl->GetFunction(context).ToLocalChecked());
   exports->Set(String::NewFromUtf8(isolate, "MyObject"),
-               tpl->GetFunction());
+               tpl->GetFunction(context).ToLocalChecked());
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
 
   if (args.IsConstructCall()) {
     // Invoked as constructor: `new MyObject(...)`
-    double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
+    double value = args[0]->IsUndefined() ?
+        0 : args[0]->NumberValue(context).FromMaybe(0);
     MyObject* obj = new MyObject(value);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
@@ -656,7 +800,6 @@ void MyObject::New(const FunctionCallbackInfo<Value>& args) {
     // Invoked as plain function `MyObject(...)`, turn into construct call.
     const int argc = 1;
     Local<Value> argv[argc] = { args[0] };
-    Local<Context> context = isolate->GetCurrentContext();
     Local<Function> cons = Local<Function>::New(isolate, constructor);
     Local<Object> result =
         cons->NewInstance(context, argc, argv).ToLocalChecked();
@@ -707,6 +850,13 @@ console.log(obj.plusOne());
 console.log(obj.plusOne());
 // Prints: 13
 ```
+
+The destructor for a wrapper object will run when the object is
+garbage-collected. For destructor testing, there are command-line flags that
+can be used to make it possible to force garbage collection. These flags are
+provided by the underlying V8 JavaScript engine. They are subject to change
+or removal at any time. They are not documented by Node.js or V8, and they
+should never be used outside of testing.
 
 ### Factory of wrapped objects
 
@@ -822,15 +972,18 @@ void MyObject::Init(Isolate* isolate) {
   // Prototype
   NODE_SET_PROTOTYPE_METHOD(tpl, "plusOne", PlusOne);
 
-  constructor.Reset(isolate, tpl->GetFunction());
+  Local<Context> context = isolate->GetCurrentContext();
+  constructor.Reset(isolate, tpl->GetFunction(context).ToLocalChecked());
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
 
   if (args.IsConstructCall()) {
     // Invoked as constructor: `new MyObject(...)`
-    double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
+    double value = args[0]->IsUndefined() ?
+        0 : args[0]->NumberValue(context).FromMaybe(0);
     MyObject* obj = new MyObject(value);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
@@ -839,7 +992,6 @@ void MyObject::New(const FunctionCallbackInfo<Value>& args) {
     const int argc = 1;
     Local<Value> argv[argc] = { args[0] };
     Local<Function> cons = Local<Function>::New(isolate, constructor);
-    Local<Context> context = isolate->GetCurrentContext();
     Local<Object> instance =
         cons->NewInstance(context, argc, argv).ToLocalChecked();
     args.GetReturnValue().Set(instance);
@@ -942,9 +1094,9 @@ void Add(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
 
   MyObject* obj1 = node::ObjectWrap::Unwrap<MyObject>(
-      args[0]->ToObject());
+      args[0]->ToObject(isolate));
   MyObject* obj2 = node::ObjectWrap::Unwrap<MyObject>(
-      args[1]->ToObject());
+      args[1]->ToObject(isolate));
 
   double sum = obj1->value() + obj2->value();
   args.GetReturnValue().Set(Number::New(isolate, sum));
@@ -1029,15 +1181,18 @@ void MyObject::Init(Isolate* isolate) {
   tpl->SetClassName(String::NewFromUtf8(isolate, "MyObject"));
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
-  constructor.Reset(isolate, tpl->GetFunction());
+  Local<Context> context = isolate->GetCurrentContext();
+  constructor.Reset(isolate, tpl->GetFunction(context).ToLocalChecked());
 }
 
 void MyObject::New(const FunctionCallbackInfo<Value>& args) {
   Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
 
   if (args.IsConstructCall()) {
     // Invoked as constructor: `new MyObject(...)`
-    double value = args[0]->IsUndefined() ? 0 : args[0]->NumberValue();
+    double value = args[0]->IsUndefined() ?
+        0 : args[0]->NumberValue(context).FromMaybe(0);
     MyObject* obj = new MyObject(value);
     obj->Wrap(args.This());
     args.GetReturnValue().Set(args.This());
@@ -1045,7 +1200,6 @@ void MyObject::New(const FunctionCallbackInfo<Value>& args) {
     // Invoked as plain function `MyObject(...)`, turn into construct call.
     const int argc = 1;
     Local<Value> argv[argc] = { args[0] };
-    Local<Context> context = isolate->GetCurrentContext();
     Local<Function> cons = Local<Function>::New(isolate, constructor);
     Local<Object> instance =
         cons->NewInstance(context, argc, argv).ToLocalChecked();
@@ -1162,6 +1316,7 @@ Test in JavaScript by running:
 require('./build/Release/addon');
 ```
 
+[Electron]: https://electronjs.org/
 [Embedder's Guide]: https://github.com/v8/v8/wiki/Embedder's%20Guide
 [Linking to Node.js' own dependencies]: #addons_linking_to_node_js_own_dependencies
 [Native Abstractions for Node.js]: https://github.com/nodejs/nan
