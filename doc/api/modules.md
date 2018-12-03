@@ -200,10 +200,11 @@ Modules are cached after the first time they are loaded. This means
 (among other things) that every call to `require('foo')` will get
 exactly the same object returned, if it would resolve to the same file.
 
-Multiple calls to `require('foo')` may not cause the module code to be
-executed multiple times.  This is an important feature. With it,
-"partially done" objects can be returned, thus allowing transitive
-dependencies to be loaded even when they would cause cycles.
+Provided `require.cache` is not modified, multiple calls to
+`require('foo')` will not cause the module code to be executed multiple times.
+This is an important feature. With it, "partially done" objects can be returned,
+thus allowing transitive dependencies to be loaded even when they would cause
+cycles.
 
 To have a module execute code multiple times, export a function, and call
 that function.
@@ -375,8 +376,9 @@ Error: Cannot find module 'some-library'
 If the module identifier passed to `require()` is not a
 [core](#modules_core_modules) module, and does not begin with `'/'`, `'../'`, or
 `'./'`, then Node.js starts at the parent directory of the current module, and
-adds `/node_modules`, and attempts to load the module from that location. Node
-will not append `node_modules` to a path already ending in `node_modules`.
+adds `/node_modules`, and attempts to load the module from that location.
+Node.js will not append `node_modules` to a path already ending in
+`node_modules`.
 
 If it is not found there, then it moves to the parent directory, and so
 on, until the root of the file system is reached.
@@ -489,8 +491,8 @@ added: v0.0.1
 
 * {string}
 
-The file name of the current module. This is the resolved absolute path of the
-current module file.
+The file name of the current module. This is the current module file's absolute
+path with symlinks resolved.
 
 For a main program this is not necessarily the same as the file name used in the
 command line.
@@ -551,7 +553,22 @@ added: v0.1.13
 
 * {Function}
 
-To require modules.
+Used to import modules, `JSON`, and local files. Modules can be imported
+from `node_modules`. Local modules and JSON files can be imported using
+a relative path (e.g. `./`, `./foo`, `./bar/baz`, `../foo`) that will be
+resolved against the directory named by [`__dirname`][] (if defined) or
+the current working directory.
+
+```js
+// Importing a local module:
+const myLocalModule = require('./path/myLocalModule');
+
+// Importing a JSON file:
+const jsonData = require('./path/filename.json');
+
+// Importing a module from node_modules or Node.js built-in module:
+const crypto = require('crypto');
+```
 
 #### require.cache
 <!-- YAML
@@ -890,7 +907,7 @@ const builtin = require('module').builtinModules;
 
 ### module.createRequireFromPath(filename)
 <!-- YAML
-added: REPLACEME
+added: v10.12.0
 -->
 
 * `filename` {string} Filename to be used to construct the relative require
@@ -905,13 +922,13 @@ const requireUtil = createRequireFromPath('../src/utils');
 requireUtil('./some-tool');
 ```
 
+[`Error`]: errors.html#errors_class_error
 [`__dirname`]: #modules_dirname
 [`__filename`]: #modules_filename
-[`Error`]: errors.html#errors_class_error
 [`module` object]: #modules_the_module_object
 [`path.dirname()`]: path.html#path_path_dirname_path
-[GLOBAL_FOLDERS]: #modules_loading_from_the_global_folders
 [`require`]: #modules_require
+[GLOBAL_FOLDERS]: #modules_loading_from_the_global_folders
 [exports shortcut]: #modules_exports_shortcut
 [module resolution]: #modules_all_together
 [module wrapper]: #modules_the_module_wrapper

@@ -12,6 +12,7 @@
     'force_dynamic_crt%': 0,
     'node_module_version%': '',
     'node_shared_zlib%': 'false',
+    'node_experimental_http_parser%': 'false',
     'node_shared_http_parser%': 'false',
     'node_shared_cares%': 'false',
     'node_shared_libuv%': 'false',
@@ -94,6 +95,9 @@
       'lib/internal/cluster/shared_handle.js',
       'lib/internal/cluster/utils.js',
       'lib/internal/cluster/worker.js',
+      'lib/internal/console/constructor.js',
+      'lib/internal/console/global.js',
+      'lib/internal/console/inspector.js',
       'lib/internal/crypto/certificate.js',
       'lib/internal/crypto/cipher.js',
       'lib/internal/crypto/diffiehellman.js',
@@ -133,6 +137,7 @@
       'lib/internal/modules/esm/translators.js',
       'lib/internal/safe_globals.js',
       'lib/internal/net.js',
+      'lib/internal/options.js',
       'lib/internal/print_help.js',
       'lib/internal/priority_queue.js',
       'lib/internal/process/esm_loader.js',
@@ -221,9 +226,9 @@
       [ 'OS=="win" and '
         'node_use_openssl=="true" and '
         'node_shared_openssl=="false"', {
-        'use_openssl_def': 1,
+        'use_openssl_def%': 1,
       }, {
-        'use_openssl_def': 0,
+        'use_openssl_def%': 0,
       }],
     ],
   },
@@ -288,7 +293,7 @@
                   'sources': [
                     'tools/msvs/genfiles/node_etw_provider.rc'
                   ],
-                }]
+                }],
               ],
             }],
           ],
@@ -305,16 +310,11 @@
           'product_name': '<(node_core_target_name)-win',
         }],
       ],
-    },
+    }, # node_core_target_name
     {
       'target_name': '<(node_lib_target_name)',
       'type': '<(node_intermediate_lib_type)',
       'product_name': '<(node_core_target_name)',
-
-      'dependencies': [
-        'node_js2c#host',
-      ],
-
       'includes': [
         'node.gypi'
       ],
@@ -329,58 +329,63 @@
         'src/bootstrapper.cc',
         'src/callback_scope.cc',
         'src/cares_wrap.cc',
-        'src/connection_wrap.cc',
         'src/connect_wrap.cc',
+        'src/connection_wrap.cc',
         'src/debug_utils.cc',
         'src/env.cc',
         'src/exceptions.cc',
         'src/fs_event_wrap.cc',
         'src/handle_wrap.cc',
         'src/heap_utils.cc',
+        'src/js_native_api.h',
+        'src/js_native_api_types.h',
+        'src/js_native_api_v8.cc',
+        'src/js_native_api_v8.h',
+        'src/js_native_api_v8_internals.h',
         'src/js_stream.cc',
         'src/module_wrap.cc',
         'src/node.cc',
         'src/node_api.cc',
-        'src/node_api.h',
-        'src/node_api_types.h',
+        'src/node_binding.cc',
         'src/node_buffer.cc',
         'src/node_config.cc',
         'src/node_constants.cc',
         'src/node_contextify.cc',
         'src/node_domain.cc',
         'src/node_encoding.cc',
-        'src/node_errors.h',
+        'src/node_errors.cc',
         'src/node_file.cc',
-        'src/node_http2.cc',
         'src/node_http_parser.cc',
+        'src/node_http2.cc',
+        'src/node_i18n.cc',
         'src/node_messaging.cc',
+        'src/node_native_module.cc',
         'src/node_options.cc',
         'src/node_os.cc',
-        'src/node_platform.cc',
         'src/node_perf.cc',
+        'src/node_platform.cc',
         'src/node_postmortem_metadata.cc',
         'src/node_process.cc',
         'src/node_serdes.cc',
+        'src/node_stat_watcher.cc',
         'src/node_trace_events.cc',
         'src/node_types.cc',
         'src/node_url.cc',
         'src/node_util.cc',
         'src/node_v8.cc',
-        'src/node_stat_watcher.cc',
         'src/node_watchdog.cc',
         'src/node_worker.cc',
         'src/node_zlib.cc',
-        'src/node_i18n.cc',
         'src/pipe_wrap.cc',
         'src/process_wrap.cc',
         'src/sharedarraybuffer_metadata.cc',
         'src/signal_wrap.cc',
         'src/spawn_sync.cc',
-        'src/string_bytes.cc',
-        'src/string_decoder.cc',
         'src/stream_base.cc',
         'src/stream_pipe.cc',
         'src/stream_wrap.cc',
+        'src/string_bytes.cc',
+        'src/string_decoder.cc',
         'src/tcp_wrap.cc',
         'src/timers.cc',
         'src/tracing/agent.cc',
@@ -398,69 +403,81 @@
         'src/async_wrap-inl.h',
         'src/base_object.h',
         'src/base_object-inl.h',
-        'src/connection_wrap.h',
+        'src/base64.h',
         'src/connect_wrap.h',
+        'src/connection_wrap.h',
         'src/debug_utils.h',
         'src/env.h',
         'src/env-inl.h',
         'src/handle_wrap.h',
+        'src/http_parser_adaptor.h',
         'src/js_stream.h',
+        'src/memory_tracker.h',
+        'src/memory_tracker-inl.h',
         'src/module_wrap.h',
         'src/node.h',
+        'src/node_api.h',
+        'src/node_api_types.h',
+        'src/node_binding.h',
         'src/node_buffer.h',
-        'src/node_code_cache.h',
         'src/node_constants.h',
+        'src/node_context_data.h',
         'src/node_contextify.h',
+        'src/node_errors.h',
         'src/node_file.h',
         'src/node_http2.h',
         'src/node_http2_state.h',
+        'src/node_i18n.h',
         'src/node_internals.h',
-        'src/node_javascript.h',
         'src/node_messaging.h',
         'src/node_mutex.h',
+        'src/node_native_module.h',
+        'src/node_object_wrap.h',
         'src/node_options.h',
         'src/node_options-inl.h',
         'src/node_perf.h',
         'src/node_perf_common.h',
         'src/node_persistent.h',
         'src/node_platform.h',
+        'src/node_revert.h',
         'src/node_root_certs.h',
+        'src/node_stat_watcher.h',
+        'src/node_union_bytes.h',
+        'src/node_url.h',
         'src/node_version.h',
         'src/node_watchdog.h',
-        'src/node_wrap.h',
-        'src/node_revert.h',
-        'src/node_i18n.h',
         'src/node_worker.h',
-        'src/memory_tracker.h',
-        'src/memory_tracker-inl.h',
         'src/pipe_wrap.h',
-        'src/tty_wrap.h',
-        'src/tcp_wrap.h',
-        'src/udp_wrap.h',
         'src/req_wrap.h',
         'src/req_wrap-inl.h',
         'src/sharedarraybuffer_metadata.h',
-        'src/string_bytes.h',
-        'src/string_decoder.h',
-        'src/string_decoder-inl.h',
+        'src/spawn_sync.h',
         'src/stream_base.h',
         'src/stream_base-inl.h',
         'src/stream_pipe.h',
         'src/stream_wrap.h',
+        'src/string_bytes.h',
+        'src/string_decoder.h',
+        'src/string_decoder-inl.h',
+        'src/string_search.h',
+        'src/tcp_wrap.h',
         'src/tracing/agent.h',
         'src/tracing/node_trace_buffer.h',
         'src/tracing/node_trace_writer.h',
         'src/tracing/trace_event.h',
+        'src/tracing/trace_event_common.h',
         'src/tracing/traced_value.h',
+        'src/tty_wrap.h',
+        'src/udp_wrap.h',
         'src/util.h',
         'src/util-inl.h',
+        # Dependency headers
         'deps/http_parser/http_parser.h',
         'deps/v8/include/v8.h',
         # javascript files to make for an even more pleasant IDE experience
         '<@(library_files)',
-        # node.gyp is added to the project by default.
+        # node.gyp is added by default, common.gypi is added for change detection
         'common.gypi',
-        '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
       ],
 
       'variables': {
@@ -497,40 +514,7 @@
           'product_name': 'node_base',
         }],
         [ 'v8_enable_inspector==1', {
-          'defines': [
-            'HAVE_INSPECTOR=1',
-          ],
-          'sources': [
-            'src/inspector_agent.cc',
-            'src/inspector_io.cc',
-            'src/inspector_js_api.cc',
-            'src/inspector_socket.cc',
-            'src/inspector_socket_server.cc',
-            'src/inspector/main_thread_interface.cc',
-            'src/inspector/worker_inspector.cc',
-            'src/inspector/node_string.cc',
-            'src/inspector/worker_agent.cc',
-            'src/inspector/tracing_agent.cc',
-            'src/inspector_agent.h',
-            'src/inspector_io.h',
-            'src/inspector_socket.h',
-            'src/inspector_socket_server.h',
-            'src/inspector/main_thread_interface.h',
-            'src/inspector/worker_inspector.h',
-            'src/inspector/node_string.h',
-            'src/inspector/worker_agent.h',
-            'src/inspector/tracing_agent.h',
-            '<@(node_inspector_generated_sources)'
-          ],
-          'dependencies': [
-            'node_protocol_generated_sources#host',
-            'v8_inspector_compress_protocol_json#host',
-          ],
-          'include_dirs': [
-            '<(SHARED_INTERMEDIATE_DIR)/include', # for inspector
-            '<(SHARED_INTERMEDIATE_DIR)',
-            '<(SHARED_INTERMEDIATE_DIR)/src', # for inspector
-          ],
+          'includes' : [ 'src/inspector/node_inspector.gypi' ],
         }, {
           'defines': [ 'HAVE_INSPECTOR=0' ]
         }],
@@ -556,6 +540,7 @@
             'src/node_win32_etw_provider.h',
             'src/node_win32_etw_provider-inl.h',
             'src/node_win32_etw_provider.cc',
+            'src/node_dtrace.h',
             'src/node_dtrace.cc',
             'tools/msvs/genfiles/node_etw_provider.h',
           ],
@@ -591,7 +576,10 @@
           # below, and the GYP-generated Makefiles will properly build them when
           # needed.
           #
-          'sources': [ 'src/node_dtrace.cc' ],
+          'sources': [
+            'src/node_dtrace.h',
+            'src/node_dtrace.cc',
+          ],
           'conditions': [
             [ 'OS=="linux"', {
               'sources': [
@@ -614,25 +602,31 @@
             'src/node_crypto.h',
             'src/node_crypto_bio.h',
             'src/node_crypto_clienthello.h',
+            'src/node_crypto_clienthello-inl.h',
+            'src/node_crypto_groups.h',
             'src/tls_wrap.cc',
             'src/tls_wrap.h'
           ],
         }],
-      ],
-    },
-    {
-      'target_name': 'mkssldef',
-      'type': 'none',
-      # TODO(bnoordhuis) Make all platforms export the same list of symbols.
-      # Teach mkssldef.py to generate linker maps that UNIX linkers understand.
-      'conditions': [
+        [ 'node_use_large_pages=="true" and OS=="linux"', {
+          'defines': [ 'NODE_ENABLE_LARGE_CODE_PAGES=1' ],
+          # The current implementation of Large Pages is under Linux.
+          # Other implementations are possible but not currently supported.
+          'sources': [
+            'src/large_pages/node_large_page.cc',
+            'src/large_pages/node_large_page.h'
+          ],
+        }],
         [ 'use_openssl_def==1', {
+          # TODO(bnoordhuis) Make all platforms export the same list of symbols.
+          # Teach mkssldef.py to generate linker maps that UNIX linkers understand.
           'variables': {
             'mkssldef_flags': [
               # Categories to export.
               '-CAES,BF,BIO,DES,DH,DSA,EC,ECDH,ECDSA,ENGINE,EVP,HMAC,MD4,MD5,'
               'PSK,RC2,RC4,RSA,SHA,SHA0,SHA1,SHA256,SHA512,SOCK,STDIO,TLSEXT,'
-              'FP_API,TLS1_METHOD,TLS1_1_METHOD,TLS1_2_METHOD,SCRYPT',
+              'FP_API,TLS1_METHOD,TLS1_1_METHOD,TLS1_2_METHOD,SCRYPT,OCSP,'
+              'NEXTPROTONEG,RMD160,CAST',
               # Defines.
               '-DWIN32',
               # Symbols to filter from the export list.
@@ -656,6 +650,7 @@
                 'deps/openssl/openssl/util/libssl.num',
               ],
               'outputs': ['<(SHARED_INTERMEDIATE_DIR)/openssl.def'],
+              'process_outputs_as_sources': 1,
               'action': [
                 'python',
                 'tools/mkssldef.py',
@@ -668,9 +663,39 @@
           ],
         }],
       ],
-    },
-    # generate ETW header and resource files
+      'actions': [
+        {
+          'action_name': 'node_js2c',
+          'process_outputs_as_sources': 1,
+          'inputs': [
+            '<@(library_files)',
+            'config.gypi',
+            'tools/check_macros.py'
+          ],
+          'outputs': [
+            '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
+          ],
+          'conditions': [
+            [ 'node_use_dtrace=="false" and node_use_etw=="false"', {
+              'inputs': [ 'src/notrace_macros.py' ]
+            }],
+            [ 'node_debug_lib=="false"', {
+              'inputs': [ 'tools/nodcheck_macros.py' ]
+            }],
+            [ 'node_debug_lib=="true"', {
+              'inputs': [ 'tools/dcheck_macros.py' ]
+            }]
+          ],
+          'action': [
+            'python', 'tools/js2c.py',
+            '<@(_outputs)',
+            '<@(_inputs)',
+          ],
+        },
+      ],
+    }, # node_lib_target_name
     {
+       # generate ETW header and resource files
       'target_name': 'node_etw',
       'type': 'none',
       'conditions': [
@@ -689,43 +714,7 @@
           ]
         } ]
       ]
-    },
-    {
-      'target_name': 'node_js2c',
-      'type': 'none',
-      'toolsets': ['host'],
-      'actions': [
-        {
-          'action_name': 'node_js2c',
-          'process_outputs_as_sources': 1,
-          'inputs': [
-            '<@(library_files)',
-            './config.gypi',
-            'tools/check_macros.py'
-          ],
-          'outputs': [
-            '<(SHARED_INTERMEDIATE_DIR)/node_javascript.cc',
-          ],
-          'conditions': [
-            [ 'node_use_dtrace=="false" and node_use_etw=="false"', {
-              'inputs': [ 'src/notrace_macros.py' ]
-            }],
-            [ 'node_debug_lib=="false"', {
-              'inputs': [ 'tools/nodcheck_macros.py' ]
-            }],
-            [ 'node_debug_lib=="true"', {
-              'inputs': [ 'tools/dcheck_macros.py' ]
-            }]
-          ],
-          'action': [
-            'python',
-            'tools/js2c.py',
-            '<@(_outputs)',
-            '<@(_inputs)',
-          ],
-        },
-      ],
-    }, # end node_js2c
+    }, # node_etw
     {
       'target_name': 'node_dtrace_header',
       'type': 'none',
@@ -753,7 +742,7 @@
           ]
         } ],
       ]
-    },
+    }, # node_dtrace_header
     {
       'target_name': 'node_dtrace_provider',
       'type': 'none',
@@ -788,7 +777,7 @@
           ],
         }],
       ]
-    },
+    }, # node_dtrace_provider
     {
       'target_name': 'node_dtrace_ustack',
       'type': 'none',
@@ -836,7 +825,7 @@
           ]
         } ],
       ]
-    },
+    }, # node_dtrace_ustack
     {
       'target_name': 'specialize_node_d',
       'type': 'none',
@@ -862,7 +851,7 @@
           ],
         } ],
       ]
-    },
+    }, # specialize_node_d
     {
       # When using shared lib to build executable in Windows, in order to avoid
       # filename collision, the executable name is node-win.exe. Need to rename
@@ -890,7 +879,7 @@
           ],
         } ],
       ]
-    },
+    }, # rename_node_bin_win
     {
       'target_name': 'cctest',
       'type': 'executable',
@@ -899,7 +888,6 @@
         '<(node_lib_target_name)',
         'rename_node_bin_win',
         'deps/gtest/gtest.gyp:gtest',
-        'node_js2c#host',
         'node_dtrace_header',
         'node_dtrace_ustack',
         'node_dtrace_provider',
@@ -956,8 +944,13 @@
         [ 'OS=="win" and node_shared=="true"', {
           'type': 'none',
         }],
+        [ 'node_shared=="true"', {
+          'xcode_settings': {
+            'OTHER_LDFLAGS': [ '-Wl,-rpath,@loader_path', ],
+          },
+        }],
       ],
-    }
+    }, # cctest
   ], # end targets
 
   'conditions': [
@@ -1008,165 +1001,5 @@
         },
       ]
     }], # end aix section
-    [ 'v8_enable_inspector==1', {
-      'variables': {
-        'protocol_path': 'tools/inspector_protocol',
-        'node_inspector_path': 'src/inspector',
-        'node_inspector_generated_sources': [
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/Forward.h',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/Protocol.cpp',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/Protocol.h',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/NodeWorker.cpp',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/NodeWorker.h',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/NodeTracing.cpp',
-          '<(SHARED_INTERMEDIATE_DIR)/src/node/inspector/protocol/NodeTracing.h',
-        ],
-        'node_protocol_files': [
-          '<(protocol_path)/lib/Allocator_h.template',
-          '<(protocol_path)/lib/Array_h.template',
-          '<(protocol_path)/lib/Collections_h.template',
-          '<(protocol_path)/lib/DispatcherBase_cpp.template',
-          '<(protocol_path)/lib/DispatcherBase_h.template',
-          '<(protocol_path)/lib/ErrorSupport_cpp.template',
-          '<(protocol_path)/lib/ErrorSupport_h.template',
-          '<(protocol_path)/lib/Forward_h.template',
-          '<(protocol_path)/lib/FrontendChannel_h.template',
-          '<(protocol_path)/lib/Maybe_h.template',
-          '<(protocol_path)/lib/Object_cpp.template',
-          '<(protocol_path)/lib/Object_h.template',
-          '<(protocol_path)/lib/Parser_cpp.template',
-          '<(protocol_path)/lib/Parser_h.template',
-          '<(protocol_path)/lib/Protocol_cpp.template',
-          '<(protocol_path)/lib/ValueConversions_h.template',
-          '<(protocol_path)/lib/Values_cpp.template',
-          '<(protocol_path)/lib/Values_h.template',
-          '<(protocol_path)/templates/Exported_h.template',
-          '<(protocol_path)/templates/Imported_h.template',
-          '<(protocol_path)/templates/TypeBuilder_cpp.template',
-          '<(protocol_path)/templates/TypeBuilder_h.template',
-          '<(protocol_path)/CodeGenerator.py',
-        ]
-      },
-      'targets': [
-        {
-          'target_name': 'prepare_protocol_json',
-          'type': 'none',
-          'toolsets': ['host'],
-          'copies': [
-            {
-              'files': [
-                '<(node_inspector_path)/node_protocol_config.json',
-                '<(node_inspector_path)/node_protocol.pdl'
-              ],
-              'destination': '<(SHARED_INTERMEDIATE_DIR)',
-            }
-          ],
-          'actions': [
-            {
-              'action_name': 'convert_node_protocol_to_json',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.pdl',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
-              ],
-              'action': [
-                'python',
-                'tools/inspector_protocol/ConvertProtocolToJSON.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-          ]
-        },
-        {
-          'target_name': 'node_protocol_generated_sources',
-          'type': 'none',
-          'toolsets': ['host'],
-          'dependencies': ['prepare_protocol_json'],
-          'actions': [
-            {
-              'action_name': 'node_protocol_generated_sources',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol_config.json',
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
-                '<@(node_protocol_files)',
-              ],
-              'outputs': [
-                '<@(node_inspector_generated_sources)',
-              ],
-              'action': [
-                'python',
-                '<(protocol_path)/CodeGenerator.py',
-                '--jinja_dir', '<@(protocol_path)/..',
-                '--output_base', '<(SHARED_INTERMEDIATE_DIR)/src/',
-                '--config', '<(SHARED_INTERMEDIATE_DIR)/node_protocol_config.json',
-              ],
-              'message': 'Generating node protocol sources from protocol json',
-            },
-          ]
-        },
-        {
-          'target_name': 'v8_inspector_compress_protocol_json',
-          'type': 'none',
-          'toolsets': ['host'],
-          'copies': [
-            {
-              'destination': '<(SHARED_INTERMEDIATE_DIR)',
-              'files': ['deps/v8/src/inspector/js_protocol.pdl']
-            }
-          ],
-          'actions': [
-            {
-              'action_name': 'v8_inspector_convert_protocol_to_json',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/js_protocol.pdl',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/js_protocol.json',
-              ],
-              'action': [
-                'python',
-                'tools/inspector_protocol/ConvertProtocolToJSON.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-            {
-              'action_name': 'concatenate_protocols',
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/js_protocol.json',
-                '<(SHARED_INTERMEDIATE_DIR)/node_protocol.json',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/concatenated_protocol.json',
-              ],
-              'action': [
-                'python',
-                'tools/inspector_protocol/ConcatenateProtocols.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-            {
-              'action_name': 'v8_inspector_compress_protocol_json',
-              'process_outputs_as_sources': 1,
-              'inputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/concatenated_protocol.json',
-              ],
-              'outputs': [
-                '<(SHARED_INTERMEDIATE_DIR)/v8_inspector_protocol_json.h',
-              ],
-              'action': [
-                'python',
-                'tools/compress_json.py',
-                '<@(_inputs)',
-                '<@(_outputs)',
-              ],
-            },
-          ],
-        },
-      ]
-    }]
   ], # end conditions block
 }

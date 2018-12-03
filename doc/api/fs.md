@@ -488,6 +488,16 @@ argument to `fs.createReadStream()`. If `path` is passed as a string, then
 `readStream.path` will be a string. If `path` is passed as a `Buffer`, then
 `readStream.path` will be a `Buffer`.
 
+### readStream.pending
+<!-- YAML
+added: v11.2.0
+-->
+
+* {boolean}
+
+This property is `true` if the underlying file has not been opened yet,
+i.e. before the `'ready'` event is emitted.
+
 ## Class: fs.Stats
 <!-- YAML
 added: v0.1.21
@@ -833,6 +843,16 @@ argument to [`fs.createWriteStream()`][]. If `path` is passed as a string, then
 `writeStream.path` will be a string. If `path` is passed as a `Buffer`, then
 `writeStream.path` will be a `Buffer`.
 
+### writeStream.pending
+<!-- YAML
+added: v11.2.0
+-->
+
+* {boolean}
+
+This property is `true` if the underlying file has not been opened yet,
+i.e. before the `'ready'` event is emitted.
+
 ## fs.access(path[, mode], callback)
 <!-- YAML
 added: v0.11.15
@@ -979,6 +999,11 @@ and handle the error, if any.
 In general, check for the accessibility of a file only if the file will not be
 used directly, for example when its accessibility is a signal from another
 process.
+
+On Windows, access-control policies (ACLs) on a directory may limit access to
+a file or directory. The `fs.access()` function, however, does not check the
+ACL and therefore may report that a path is accessible even if the ACL restricts
+the user from reading or writing to it.
 
 ## fs.accessSync(path[, mode])
 <!-- YAML
@@ -1410,7 +1435,7 @@ fs.copyFileSync('source.txt', 'destination.txt', COPYFILE_EXCL);
 <!-- YAML
 added: v0.1.31
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/19898
     description: Impose new restrictions on `start` and `end`, throwing
                  more appropriate errors in cases when we cannot reasonably
@@ -1461,7 +1486,7 @@ closing naturally.
 
 ```js
 const fs = require('fs');
-// Create a stream from some character  device.
+// Create a stream from some character device.
 const stream = fs.createReadStream('/dev/input/event0');
 setTimeout(() => {
   stream.close(); // This may not close the stream.
@@ -2148,7 +2173,7 @@ Synchronous lstat(2).
 <!-- YAML
 added: v0.1.8
 changes:
-  - version: REPLACEME
+  - version: v10.12.0
     pr-url: https://github.com/nodejs/node/pull/21875
     description: The second argument can now be an `options` object with
                  `recursive` and `mode` properties.
@@ -2193,7 +2218,7 @@ See also: mkdir(2).
 <!-- YAML
 added: v0.1.21
 changes:
-  - version: REPLACEME
+  - version: v10.12.0
     pr-url: https://github.com/nodejs/node/pull/21875
     description: The second argument can now be an `options` object with
                  `recursive` and `mode` properties.
@@ -2304,10 +2329,13 @@ this API: [`fs.mkdtemp()`][].
 The optional `options` argument can be a string specifying an encoding, or an
 object with an `encoding` property specifying the character encoding to use.
 
-## fs.open(path, flags[, mode], callback)
+## fs.open(path[, flags[, mode]], callback)
 <!-- YAML
 added: v0.0.2
 changes:
+  - version: v11.1.0
+    pr-url: https://github.com/nodejs/node/pull/23767
+    description: The `flags` argument is now optional and defaults to `'r'`.
   - version: v9.9.0
     pr-url: https://github.com/nodejs/node/pull/18801
     description: The `as` and `as+` modes are supported now.
@@ -2319,6 +2347,7 @@ changes:
 
 * `path` {string|Buffer|URL}
 * `flags` {string|number} See [support of file system `flags`][].
+  **Default:** `'r'`.
 * `mode` {integer} **Default:** `0o666` (readable and writable)
 * `callback` {Function}
   * `err` {Error}
@@ -2340,10 +2369,16 @@ a colon, Node.js will open a file system stream, as described by
 Functions based on `fs.open()` exhibit this behavior as well:
 `fs.writeFile()`, `fs.readFile()`, etc.
 
-## fs.openSync(path, flags[, mode])
+## fs.openSync(path[, flags, mode])
 <!-- YAML
 added: v0.1.21
 changes:
+  - version: v11.1.0
+    pr-url: https://github.com/nodejs/node/pull/23767
+    description: The `flags` argument is now optional and defaults to `'r'`.
+  - version: v9.9.0
+    pr-url: https://github.com/nodejs/node/pull/18801
+    description: The `as` and `as+` modes are supported now.
   - version: v7.6.0
     pr-url: https://github.com/nodejs/node/pull/10739
     description: The `path` parameter can be a WHATWG `URL` object using `file:`
@@ -2351,7 +2386,8 @@ changes:
 -->
 
 * `path` {string|Buffer|URL}
-* `flags` {string|number} See [support of file system `flags`][].
+* `flags` {string|number} **Default:** `'r'`.
+   See [support of file system `flags`][].
 * `mode` {integer} **Default:** `0o666`
 * Returns: {number}
 
@@ -2547,13 +2583,17 @@ fs.readFile('<directory>', (err, data) => {
 });
 ```
 
-Any specified file descriptor has to support reading.
-
-If a file descriptor is specified as the `path`, it will not be closed
-automatically.
-
 The `fs.readFile()` function buffers the entire file. To minimize memory costs,
 when possible prefer streaming via `fs.createReadStream()`.
+
+### File Descriptors
+1. Any specified file descriptor has to support reading.
+2. If a file descriptor is specified as the `path`, it will not be closed
+automatically.
+3. The reading will begin at the current position. For example, if the file
+already had `'Hello World`' and six bytes are read with the file descriptor,
+the call to `fs.readFile()` with the same file descriptor, would give
+`'World'`, rather than `'Hello World'`.
 
 ## fs.readFileSync(path[, options])
 <!-- YAML
@@ -2988,20 +3028,26 @@ changes:
     description: The `target` and `path` parameters can be WHATWG `URL` objects
                  using `file:` protocol. Support is currently still
                  *experimental*.
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/23724
+    description: If the `type` argument is left undefined, Node will autodetect
+                 `target` type and automatically select `dir` or `file`
 -->
 
 * `target` {string|Buffer|URL}
 * `path` {string|Buffer|URL}
-* `type` {string} **Default:** `'file'`
+* `type` {string}
 * `callback` {Function}
   * `err` {Error}
 
 Asynchronous symlink(2). No arguments other than a possible exception are given
-to the completion callback. The `type` argument can be set to `'dir'`,
-`'file'`, or `'junction'` and is only available on
-Windows (ignored on other platforms). Windows junction points require the
-destination path to be absolute. When using `'junction'`, the `target` argument
-will automatically be normalized to absolute path.
+to the completion callback. The `type` argument is only available on Windows
+and ignored on other platforms. It can be set to `'dir'`, `'file'`, or
+`'junction'`. If the `type` argument is not set, Node will autodetect `target`
+type and use `'file'` or `'dir'`. If the `target` does not exist, `'file'` will
+be used. Windows junction points require the destination path to be absolute.
+When using `'junction'`, the `target` argument will automatically be normalized
+to absolute path.
 
 Here is an example below:
 
@@ -3020,11 +3066,15 @@ changes:
     description: The `target` and `path` parameters can be WHATWG `URL` objects
                  using `file:` protocol. Support is currently still
                  *experimental*.
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/23724
+    description: If the `type` argument is left undefined, Node will autodetect
+                 `target` type and automatically select `dir` or `file`
 -->
 
 * `target` {string|Buffer|URL}
 * `path` {string|Buffer|URL}
-* `type` {string} **Default:** `'file'`
+* `type` {string}
 
 Returns `undefined`.
 
@@ -3488,6 +3538,13 @@ On Linux, positional writes don't work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
+On Windows, if the file descriptor is connected to the console (e.g. `fd == 1`
+or `stdout`) a string containing non-ASCII characters will not be rendered
+properly by default, regardless of the encoding used.
+It is possible to configure the console to render UTF-8 properly by changing the
+active codepage with the `chcp 65001` command. See the [chcp][] docs for more
+details.
+
 ## fs.writeFile(file, data[, options], callback)
 <!-- YAML
 added: v0.1.29
@@ -3540,14 +3597,19 @@ If `options` is a string, then it specifies the encoding:
 fs.writeFile('message.txt', 'Hello Node.js', 'utf8', callback);
 ```
 
-Any specified file descriptor has to support writing.
-
 It is unsafe to use `fs.writeFile()` multiple times on the same file without
 waiting for the callback. For this scenario, [`fs.createWriteStream()`][] is
 recommended.
 
-If a file descriptor is specified as the `file`, it will not be closed
+### File Descriptors
+1. Any specified file descriptor has to support writing.
+2. If a file descriptor is specified as the `file`, it will not be closed
 automatically.
+3. The writing will begin at the beginning of the file. For example, if the
+file already had `'Hello World'` and the newly written content is `'Aloha'`,
+then the contents of the file would be `'Aloha World'`, rather than just
+`'Aloha'`.
+
 
 ## fs.writeFileSync(file, data[, options])
 <!-- YAML
@@ -3780,6 +3842,11 @@ returned.
 
 The `FileHandle` has to support reading.
 
+If one or more `filehandle.read()` calls are made on a file handle and then a
+`filehandle.readFile()` call is made, the data will be read from the current
+position till the end of the file. It doesn't always read from the beginning
+of the file.
+
 #### filehandle.stat([options])
 <!-- YAML
 added: v10.0.0
@@ -3918,6 +3985,37 @@ On Linux, positional writes do not work when the file is opened in append mode.
 The kernel ignores the position argument and always appends the data to
 the end of the file.
 
+#### filehandle.write(string[, position[, encoding]])
+<!-- YAML
+added: v10.0.0
+-->
+
+* `string` {string}
+* `position` {integer}
+* `encoding` {string} **Default:** `'utf8'`
+* Returns: {Promise}
+
+Write `string` to the file. If `string` is not a string, then
+the value will be coerced to one.
+
+The `Promise` is resolved with an object containing a `bytesWritten` property
+identifying the number of bytes written, and a `buffer` property containing
+a reference to the `string` written.
+
+`position` refers to the offset from the beginning of the file where this data
+should be written. If the type of `position` is not a `number` the data
+will be written at the current position. See pwrite(2).
+
+`encoding` is the expected string encoding.
+
+It is unsafe to use `filehandle.write()` multiple times on the same file
+without waiting for the `Promise` to be resolved (or rejected). For this
+scenario, [`fs.createWriteStream()`][] is strongly recommended.
+
+On Linux, positional writes do not work when the file is opened in append mode.
+The kernel ignores the position argument and always appends the data to
+the end of the file.
+
 #### filehandle.writeFile(data, options)
 <!-- YAML
 added: v10.0.0
@@ -3941,6 +4039,11 @@ The `FileHandle` has to support writing.
 
 It is unsafe to use `filehandle.writeFile()` multiple times on the same file
 without waiting for the `Promise` to be resolved (or rejected).
+
+If one or more `filehandle.write()` calls are made on a file handle and then a
+`filehandle.writeFile()` call is made, the data will be written from the
+current position till the end of the file. It doesn't always write from the
+beginning of the file.
 
 ### fsPromises.access(path[, mode])
 <!-- YAML
@@ -4185,10 +4288,15 @@ characters directly to the `prefix` string. For instance, given a directory
 ### fsPromises.open(path, flags[, mode])
 <!-- YAML
 added: v10.0.0
+changes:
+  - version: v11.1.0
+    pr-url: https://github.com/nodejs/node/pull/23767
+    description: The `flags` argument is now optional and defaults to `'r'`.
 -->
 
 * `path` {string|Buffer|URL}
 * `flags` {string|number} See [support of file system `flags`][].
+  **Default:** `'r'`.
 * `mode` {integer} **Default:** `0o666` (readable and writable)
 * Returns: {Promise}
 
@@ -4550,7 +4658,7 @@ The following constants are meant for use with `fs.open()`.
   <td><code>O_NOATIME</code></td>
     <td>Flag indicating reading accesses to the file system will no longer
     result in an update to the <code>atime</code> information associated with
-    the file.  This flag is available on Linux operating systems only.</td>
+    the file. This flag is available on Linux operating systems only.</td>
   </tr>
   <tr>
     <td><code>O_NOFOLLOW</code></td>
@@ -4779,13 +4887,13 @@ the file contents.
 [`AHAFS`]: https://www.ibm.com/developerworks/aix/library/au-aix_event_infrastructure/
 [`Buffer.byteLength`]: buffer.html#buffer_class_method_buffer_bytelength_string_encoding
 [`Buffer`]: buffer.html#buffer_buffer
+[`EventEmitter`]: events.html
 [`FSEvents`]: https://developer.apple.com/documentation/coreservices/file_system_events
 [`ReadDirectoryChangesW`]: https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-readdirectorychangesw
 [`ReadStream`]: #fs_class_fs_readstream
 [`URL`]: url.html#url_the_whatwg_url_api
 [`UV_THREADPOOL_SIZE`]: cli.html#cli_uv_threadpool_size_size
 [`WriteStream`]: #fs_class_fs_writestream
-[`EventEmitter`]: events.html
 [`event ports`]: http://illumos.org/man/port_create
 [`fs.Dirent`]: #fs_class_fs_dirent
 [`fs.FSWatcher`]: #fs_class_fs_fswatcher
@@ -4804,10 +4912,10 @@ the file contents.
 [`fs.mkdtemp()`]: #fs_fs_mkdtemp_prefix_options_callback
 [`fs.open()`]: #fs_fs_open_path_flags_mode_callback
 [`fs.read()`]: #fs_fs_read_fd_buffer_offset_length_position_callback
-[`fs.readdir()`]: #fs_fs_readdir_path_options_callback
-[`fs.readdirSync()`]: #fs_fs_readdirsync_path_options
 [`fs.readFile()`]: #fs_fs_readfile_path_options_callback
 [`fs.readFileSync()`]: #fs_fs_readfilesync_path_options
+[`fs.readdir()`]: #fs_fs_readdir_path_options_callback
+[`fs.readdirSync()`]: #fs_fs_readdirsync_path_options
 [`fs.realpath()`]: #fs_fs_realpath_path_options_callback
 [`fs.rmdir()`]: #fs_fs_rmdir_path_callback
 [`fs.stat()`]: #fs_fs_stat_path_options_callback
@@ -4825,13 +4933,14 @@ the file contents.
 [Caveats]: #fs_caveats
 [Common System Errors]: errors.html#errors_common_system_errors
 [FS Constants]: #fs_fs_constants_1
+[File Access Constants]: #fs_file_access_constants
 [MDN-Date]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date
 [MDN-Number]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type
 [MSDN-Rel-Path]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file#fully-qualified-vs-relative-paths
+[MSDN-Using-Streams]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/using-streams
+[Naming Files, Paths, and Namespaces]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
 [Readable Streams]: stream.html#stream_class_stream_readable
 [Writable Stream]: stream.html#stream_class_stream_writable
+[chcp]: https://ss64.com/nt/chcp.html
 [inode]: https://en.wikipedia.org/wiki/Inode
-[Naming Files, Paths, and Namespaces]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file
-[MSDN-Using-Streams]: https://docs.microsoft.com/en-us/windows/desktop/FileIO/using-streams
 [support of file system `flags`]: #fs_file_system_flags
-[File Access Constants]: #fs_file_access_constants

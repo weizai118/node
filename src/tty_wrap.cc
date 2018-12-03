@@ -24,7 +24,6 @@
 #include "env-inl.h"
 #include "handle_wrap.h"
 #include "node_buffer.h"
-#include "node_wrap.h"
 #include "stream_base-inl.h"
 #include "stream_wrap.h"
 #include "util-inl.h"
@@ -52,10 +51,7 @@ void TTYWrap::Initialize(Local<Object> target,
   Local<FunctionTemplate> t = env->NewFunctionTemplate(New);
   t->SetClassName(ttyString);
   t->InstanceTemplate()->SetInternalFieldCount(1);
-
-  AsyncWrap::AddWrapMethods(env, t);
-  HandleWrap::AddWrapMethods(env, t);
-  LibuvStreamWrap::AddMethods(env, t);
+  t->Inherit(LibuvStreamWrap::GetConstructorTemplate(env));
 
   env->SetProtoMethodNoSideEffect(t, "getWindowSize", TTYWrap::GetWindowSize);
   env->SetProtoMethod(t, "setRawMode", SetRawMode);
@@ -63,13 +59,10 @@ void TTYWrap::Initialize(Local<Object> target,
   env->SetMethodNoSideEffect(target, "isTTY", IsTTY);
   env->SetMethodNoSideEffect(target, "guessHandleType", GuessHandleType);
 
-  target->Set(ttyString, t->GetFunction(env->context()).ToLocalChecked());
+  target->Set(env->context(),
+              ttyString,
+              t->GetFunction(env->context()).ToLocalChecked()).FromJust();
   env->set_tty_constructor_template(t);
-}
-
-
-uv_tty_t* TTYWrap::UVHandle() {
-  return &handle_;
 }
 
 
@@ -121,8 +114,8 @@ void TTYWrap::GetWindowSize(const FunctionCallbackInfo<Value>& args) {
 
   if (err == 0) {
     Local<v8::Array> a = args[0].As<Array>();
-    a->Set(0, Integer::New(env->isolate(), width));
-    a->Set(1, Integer::New(env->isolate(), height));
+    a->Set(env->context(), 0, Integer::New(env->isolate(), width)).FromJust();
+    a->Set(env->context(), 1, Integer::New(env->isolate(), height)).FromJust();
   }
 
   args.GetReturnValue().Set(err);

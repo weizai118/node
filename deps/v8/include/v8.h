@@ -1123,6 +1123,10 @@ class V8_EXPORT PrimitiveArray {
  public:
   static Local<PrimitiveArray> New(Isolate* isolate, int length);
   int Length() const;
+  V8_DEPRECATED("Use Isolate* version",
+      void Set(int index, Local<Primitive> item));
+  V8_DEPRECATED("Use Isolate* version",
+      Local<Primitive> Get(int index));
   void Set(Isolate* isolate, int index, Local<Primitive> item);
   Local<Primitive> Get(Isolate* isolate, int index);
 };
@@ -1829,6 +1833,8 @@ class V8_EXPORT StackTrace {
   /**
    * Returns a StackFrame at a particular index.
    */
+  V8_DEPRECATED("Use Isolate version",
+                Local<StackFrame> GetFrame(uint32_t index) const);
   Local<StackFrame> GetFrame(Isolate* isolate, uint32_t index) const;
 
   /**
@@ -1957,9 +1963,9 @@ class V8_EXPORT JSON {
    * \param json_string The string to parse.
    * \return The corresponding value if successfully parsed.
    */
-  static V8_DEPRECATE_SOON("Use the maybe version taking context",
-                           MaybeLocal<Value> Parse(Isolate* isolate,
-                                                   Local<String> json_string));
+  static V8_DEPRECATED("Use the maybe version taking context",
+                       MaybeLocal<Value> Parse(Isolate* isolate,
+                                               Local<String> json_string));
   static V8_WARN_UNUSED_RESULT MaybeLocal<Value> Parse(
       Local<Context> context, Local<String> json_string);
 
@@ -2059,7 +2065,7 @@ class V8_EXPORT ValueSerializer {
    * Returns the stored data. This serializer should not be used once the buffer
    * is released. The contents are undefined if a previous write has failed.
    */
-  V8_DEPRECATE_SOON("Use Release()", std::vector<uint8_t> ReleaseBuffer());
+  V8_DEPRECATED("Use Release()", std::vector<uint8_t> ReleaseBuffer());
 
   /**
    * Returns the stored data (allocated using the delegate's
@@ -2080,10 +2086,10 @@ class V8_EXPORT ValueSerializer {
   /**
    * Similar to TransferArrayBuffer, but for SharedArrayBuffer.
    */
-  V8_DEPRECATE_SOON("Use Delegate::GetSharedArrayBufferId",
-                    void TransferSharedArrayBuffer(
-                        uint32_t transfer_id,
-                        Local<SharedArrayBuffer> shared_array_buffer));
+  V8_DEPRECATED("Use Delegate::GetSharedArrayBufferId",
+                void TransferSharedArrayBuffer(
+                    uint32_t transfer_id,
+                    Local<SharedArrayBuffer> shared_array_buffer));
 
   /**
    * Indicate whether to treat ArrayBufferView objects as host objects,
@@ -2524,18 +2530,25 @@ class V8_EXPORT Value : public Data {
       Local<Context> context) const;
   V8_WARN_UNUSED_RESULT MaybeLocal<Int32> ToInt32(Local<Context> context) const;
 
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Boolean> ToBoolean(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Number> ToNumber(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<String> ToString(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Object> ToObject(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Integer> ToInteger(Isolate* isolate) const);
-  V8_DEPRECATE_SOON("Use maybe version",
-                    Local<Int32> ToInt32(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Boolean> ToBoolean(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Number> ToNumber(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<String> ToString(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Object> ToObject(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Integer> ToInteger(Isolate* isolate) const);
+  V8_DEPRECATED("Use maybe version",
+                Local<Int32> ToInt32(Isolate* isolate) const);
+
+  inline V8_DEPRECATED("Use maybe version",
+                       Local<Boolean> ToBoolean() const);
+  inline V8_DEPRECATED("Use maybe version", Local<String> ToString() const);
+  inline V8_DEPRECATED("Use maybe version", Local<Object> ToObject() const);
+  inline V8_DEPRECATED("Use maybe version",
+                       Local<Integer> ToInteger() const);
 
   /**
    * Attempts to convert a string to an array index.
@@ -2552,7 +2565,14 @@ class V8_EXPORT Value : public Data {
       Local<Context> context) const;
   V8_WARN_UNUSED_RESULT Maybe<int32_t> Int32Value(Local<Context> context) const;
 
+  V8_DEPRECATED("Use maybe version", bool BooleanValue() const);
+  V8_DEPRECATED("Use maybe version", double NumberValue() const);
+  V8_DEPRECATED("Use maybe version", int64_t IntegerValue() const);
+  V8_DEPRECATED("Use maybe version", uint32_t Uint32Value() const);
+  V8_DEPRECATED("Use maybe version", int32_t Int32Value() const);
+
   /** JS == */
+  V8_DEPRECATED("Use maybe version", bool Equals(Local<Value> that) const);
   V8_WARN_UNUSED_RESULT Maybe<bool> Equals(Local<Context> context,
                                            Local<Value> that) const;
   bool StrictEquals(Local<Value> that) const;
@@ -2659,6 +2679,8 @@ class V8_EXPORT String : public Name {
    * Returns the number of bytes in the UTF-8 encoded
    * representation of this string.
    */
+  V8_DEPRECATED("Use Isolate version instead", int Utf8Length() const);
+
   int Utf8Length(Isolate* isolate) const;
 
   /**
@@ -2715,12 +2737,23 @@ class V8_EXPORT String : public Name {
   // 16-bit character codes.
   int Write(Isolate* isolate, uint16_t* buffer, int start = 0, int length = -1,
             int options = NO_OPTIONS) const;
+  V8_DEPRECATED("Use Isolate* version",
+                int Write(uint16_t* buffer, int start = 0, int length = -1,
+                          int options = NO_OPTIONS) const);
   // One byte characters.
   int WriteOneByte(Isolate* isolate, uint8_t* buffer, int start = 0,
                    int length = -1, int options = NO_OPTIONS) const;
+  V8_DEPRECATED("Use Isolate* version",
+                int WriteOneByte(uint8_t* buffer, int start = 0,
+                                 int length = -1, int options = NO_OPTIONS)
+                    const);
   // UTF-8 encoded characters.
   int WriteUtf8(Isolate* isolate, char* buffer, int length = -1,
                 int* nchars_ref = NULL, int options = NO_OPTIONS) const;
+  V8_DEPRECATED("Use Isolate* version",
+                int WriteUtf8(char* buffer, int length = -1,
+                              int* nchars_ref = NULL,
+                              int options = NO_OPTIONS) const);
 
   /**
    * A zero length string.
@@ -2884,6 +2917,9 @@ class V8_EXPORT String : public Name {
    */
   static Local<String> Concat(Isolate* isolate, Local<String> left,
                               Local<String> right);
+  static V8_DEPRECATED("Use Isolate* version",
+                       Local<String> Concat(Local<String> left,
+                                            Local<String> right));
 
   /**
    * Creates a new external string using the data defined in the given
@@ -2952,6 +2988,8 @@ class V8_EXPORT String : public Name {
    */
   class V8_EXPORT Utf8Value {
    public:
+    V8_DEPRECATED("Use Isolate version",
+                  explicit Utf8Value(Local<v8::Value> obj));
     Utf8Value(Isolate* isolate, Local<v8::Value> obj);
     ~Utf8Value();
     char* operator*() { return str_; }
@@ -2975,6 +3013,7 @@ class V8_EXPORT String : public Name {
    */
   class V8_EXPORT Value {
    public:
+    V8_DEPRECATED("Use Isolate version", explicit Value(Local<v8::Value> obj));
     Value(Isolate* isolate, Local<v8::Value> obj);
     ~Value();
     uint16_t* operator*() { return str_; }
@@ -3400,7 +3439,7 @@ class V8_EXPORT Object : public Value {
   V8_WARN_UNUSED_RESULT Maybe<bool> Has(Local<Context> context,
                                         Local<Value> key);
 
-  V8_DEPRECATE_SOON("Use maybe version", bool Delete(Local<Value> key));
+  V8_DEPRECATED("Use maybe version", bool Delete(Local<Value> key));
   V8_WARN_UNUSED_RESULT Maybe<bool> Delete(Local<Context> context,
                                            Local<Value> key);
 
@@ -3740,6 +3779,12 @@ class V8_EXPORT Array : public Object {
    */
   static Local<Array> New(Isolate* isolate, int length = 0);
 
+  /**
+   * Creates a JavaScript array out of a Local<Value> array in C++
+   * with a known length.
+   */
+  static Local<Array> New(Isolate* isolate, Local<Value>* elements,
+                          size_t length);
   V8_INLINE static Array* Cast(Value* obj);
  private:
   Array();
@@ -4323,13 +4368,6 @@ class V8_EXPORT WasmCompiledModule : public Object {
  public:
   typedef std::pair<std::unique_ptr<const uint8_t[]>, size_t> SerializedModule;
 
-// The COMMA macro allows us to use ',' inside of the V8_DEPRECATED macro.
-#define COMMA ,
-  V8_DEPRECATED(
-      "Use BufferReference.",
-      typedef std::pair<const uint8_t * COMMA size_t> CallerOwnedBuffer);
-#undef COMMA
-
   /**
    * A unowned reference to a byte buffer.
    */
@@ -4338,12 +4376,6 @@ class V8_EXPORT WasmCompiledModule : public Object {
     size_t size;
     BufferReference(const uint8_t* start, size_t size)
         : start(start), size(size) {}
-    // Temporarily allow conversion to and from CallerOwnedBuffer.
-    V8_DEPRECATED(
-        "Use BufferReference directly.",
-        inline BufferReference(CallerOwnedBuffer));  // NOLINT(runtime/explicit)
-    V8_DEPRECATED("Use BufferReference directly.",
-                      inline operator CallerOwnedBuffer());
   };
 
   /**
@@ -4390,8 +4422,6 @@ class V8_EXPORT WasmCompiledModule : public Object {
    * Get the wasm-encoded bytes that were used to compile this module.
    */
   BufferReference GetWasmWireBytesRef();
-  V8_DEPRECATED("Use GetWasmWireBytesRef version.",
-                    Local<String> GetWasmWireBytes());
 
   /**
    * Serialize the compiled module. The serialized data does not include the
@@ -4423,15 +4453,6 @@ class V8_EXPORT WasmCompiledModule : public Object {
   WasmCompiledModule();
   static void CheckCast(Value* obj);
 };
-
-// TODO(clemensh): Remove after M70 branch.
-WasmCompiledModule::BufferReference::BufferReference(
-    WasmCompiledModule::CallerOwnedBuffer buf)
-    : BufferReference(buf.first, buf.second) {}
-WasmCompiledModule::BufferReference::
-operator WasmCompiledModule::CallerOwnedBuffer() {
-  return {start, size};
-}
 
 /**
  * The V8 interface for WebAssembly streaming compilation. When streaming
@@ -5133,8 +5154,8 @@ class V8_EXPORT SharedArrayBuffer : public Object {
  */
 class V8_EXPORT Date : public Object {
  public:
-  static V8_DEPRECATE_SOON("Use maybe version.",
-                           Local<Value> New(Isolate* isolate, double time));
+  static V8_DEPRECATED("Use maybe version.",
+                       Local<Value> New(Isolate* isolate, double time));
   static V8_WARN_UNUSED_RESULT MaybeLocal<Value> New(Local<Context> context,
                                                      double time);
 
@@ -5217,6 +5238,8 @@ class V8_EXPORT BooleanObject : public Object {
 class V8_EXPORT StringObject : public Object {
  public:
   static Local<Value> New(Isolate* isolate, Local<String> value);
+  V8_DEPRECATED("Use Isolate* version",
+                static Local<Value> New(Local<String> value));
 
   Local<String> ValueOf() const;
 
@@ -6391,14 +6414,14 @@ class V8_EXPORT ResourceConstraints {
                          uint64_t virtual_memory_limit);
 
   // Returns the max semi-space size in MB.
-  V8_DEPRECATE_SOON("Use max_semi_space_size_in_kb()",
-                    size_t max_semi_space_size()) {
+  V8_DEPRECATED("Use max_semi_space_size_in_kb()",
+                size_t max_semi_space_size()) {
     return max_semi_space_size_in_kb_ / 1024;
   }
 
   // Sets the max semi-space size in MB.
-  V8_DEPRECATE_SOON("Use set_max_semi_space_size_in_kb(size_t limit_in_kb)",
-                    void set_max_semi_space_size(size_t limit_in_mb)) {
+  V8_DEPRECATED("Use set_max_semi_space_size_in_kb(size_t limit_in_kb)",
+                void set_max_semi_space_size(size_t limit_in_mb)) {
     max_semi_space_size_in_kb_ = limit_in_mb * 1024;
   }
 
@@ -6416,12 +6439,12 @@ class V8_EXPORT ResourceConstraints {
   void set_max_old_space_size(size_t limit_in_mb) {
     max_old_space_size_ = limit_in_mb;
   }
-  V8_DEPRECATE_SOON("max_executable_size_ is subsumed by max_old_space_size_",
-                    size_t max_executable_size() const) {
+  V8_DEPRECATED("max_executable_size_ is subsumed by max_old_space_size_",
+                size_t max_executable_size() const) {
     return max_executable_size_;
   }
-  V8_DEPRECATE_SOON("max_executable_size_ is subsumed by max_old_space_size_",
-                    void set_max_executable_size(size_t limit_in_mb)) {
+  V8_DEPRECATED("max_executable_size_ is subsumed by max_old_space_size_",
+                void set_max_executable_size(size_t limit_in_mb)) {
     max_executable_size_ = limit_in_mb;
   }
   uint32_t* stack_limit() const { return stack_limit_; }
@@ -7050,9 +7073,9 @@ class V8_EXPORT EmbedderHeapTracer {
    * Note: Only one of the AdvanceTracing methods needs to be overriden by the
    * embedder.
    */
-  V8_DEPRECATE_SOON("Use void AdvanceTracing(deadline_in_ms)",
-                    virtual bool AdvanceTracing(
-                        double deadline_in_ms, AdvanceTracingActions actions)) {
+  V8_DEPRECATED("Use void AdvanceTracing(deadline_in_ms)",
+                virtual bool AdvanceTracing(
+                    double deadline_in_ms, AdvanceTracingActions actions)) {
     return false;
   }
 
@@ -7091,8 +7114,8 @@ class V8_EXPORT EmbedderHeapTracer {
    * Note: Only one of the EnterFinalPause methods needs to be overriden by the
    * embedder.
    */
-  V8_DEPRECATE_SOON("Use void EnterFinalPause(EmbedderStackState)",
-                    virtual void EnterFinalPause()) {}
+  V8_DEPRECATED("Use void EnterFinalPause(EmbedderStackState)",
+                virtual void EnterFinalPause()) {}
   virtual void EnterFinalPause(EmbedderStackState stack_state);
 
   /**
@@ -10213,6 +10236,30 @@ bool Value::QuickIsString() const {
 
 template <class T> Value* Value::Cast(T* value) {
   return static_cast<Value*>(value);
+}
+
+
+Local<Boolean> Value::ToBoolean() const {
+  return ToBoolean(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(Local<Boolean>());
+}
+
+
+Local<String> Value::ToString() const {
+  return ToString(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(Local<String>());
+}
+
+
+Local<Object> Value::ToObject() const {
+  return ToObject(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(Local<Object>());
+}
+
+
+Local<Integer> Value::ToInteger() const {
+  return ToInteger(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(Local<Integer>());
 }
 
 

@@ -68,6 +68,18 @@ assert.strictEqual(util.format('%d', -0.5), '-0.5');
 assert.strictEqual(util.format('%d', ''), '0');
 assert.strictEqual(util.format('%d %d', 42, 43), '42 43');
 assert.strictEqual(util.format('%d %d', 42), '42 %d');
+assert.strictEqual(
+  util.format('%d', 1180591620717411303424),
+  '1.1805916207174113e+21'
+);
+assert.strictEqual(
+  util.format('%d', 1180591620717411303424n),
+  '1180591620717411303424n'
+);
+assert.strictEqual(
+  util.format('%d %d', 1180591620717411303424n, 12345678901234567890123n),
+  '1180591620717411303424n 12345678901234567890123n'
+);
 
 // Integer format specifier
 assert.strictEqual(util.format('%i'), '%i');
@@ -80,6 +92,28 @@ assert.strictEqual(util.format('%i', -0.5), '0');
 assert.strictEqual(util.format('%i', ''), 'NaN');
 assert.strictEqual(util.format('%i %i', 42, 43), '42 43');
 assert.strictEqual(util.format('%i %i', 42), '42 %i');
+assert.strictEqual(
+  util.format('%i', 1180591620717411303424),
+  '1'
+);
+assert.strictEqual(
+  util.format('%i', 1180591620717411303424n),
+  '1180591620717411303424n'
+);
+assert.strictEqual(
+  util.format('%i %i', 1180591620717411303424n, 12345678901234567890123n),
+  '1180591620717411303424n 12345678901234567890123n'
+);
+
+assert.strictEqual(
+  util.format('%d %i', 1180591620717411303424n, 12345678901234567890123n),
+  '1180591620717411303424n 12345678901234567890123n'
+);
+
+assert.strictEqual(
+  util.format('%i %d', 1180591620717411303424n, 12345678901234567890123n),
+  '1180591620717411303424n 12345678901234567890123n'
+);
 
 // Float format specifier
 assert.strictEqual(util.format('%f'), '%f');
@@ -239,6 +273,10 @@ assert.strictEqual(util.format('percent: %d%, fraction: %d', 10, 0.1),
                    'percent: 10%, fraction: 0.1');
 assert.strictEqual(util.format('abc%', 1), 'abc% 1');
 
+// Additional arguments after format specifiers
+assert.strictEqual(util.format('%i', 1, 'number'), '1 number');
+assert.strictEqual(util.format('%i', 1, () => {}), '1 [Function]');
+
 {
   const o = {};
   o.o = o;
@@ -281,3 +319,15 @@ function BadCustomError(msg) {
 util.inherits(BadCustomError, Error);
 assert.strictEqual(util.format(new BadCustomError('foo')),
                    '[BadCustomError: foo]');
+
+// The format of arguments should not depend on type of the first argument
+assert.strictEqual(util.format('1', '1'), '1 1');
+assert.strictEqual(util.format(1, '1'), '1 1');
+assert.strictEqual(util.format('1', 1), '1 1');
+assert.strictEqual(util.format(1, 1), '1 1');
+assert.strictEqual(util.format('1', () => {}), '1 [Function]');
+assert.strictEqual(util.format(1, () => {}), '1 [Function]');
+assert.strictEqual(util.format('1', "'"), "1 '");
+assert.strictEqual(util.format(1, "'"), "1 '");
+assert.strictEqual(util.format('1', 'number'), '1 number');
+assert.strictEqual(util.format(1, 'number'), '1 number');

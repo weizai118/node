@@ -26,12 +26,6 @@ using v8::PromiseRejectMessage;
 using v8::String;
 using v8::Value;
 
-void SetupProcessObject(const FunctionCallbackInfo<Value>& args) {
-  Environment* env = Environment::GetCurrent(args);
-  CHECK(args[0]->IsFunction());
-  env->set_push_values_to_array_function(args[0].As<Function>());
-}
-
 void RunMicrotasks(const FunctionCallbackInfo<Value>& args) {
   args.GetIsolate()->RunMicrotasks();
 }
@@ -56,11 +50,12 @@ void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
           .ToLocalChecked();
   run_microtasks_fn->SetName(FIXED_ONE_BYTE_STRING(isolate, "runMicrotasks"));
 
-  Local<Array> ret = Array::New(isolate, 2);
-  ret->Set(context, 0, env->tick_info()->fields().GetJSArray()).FromJust();
-  ret->Set(context, 1, run_microtasks_fn).FromJust();
+  Local<Value> ret[] = {
+    env->tick_info()->fields().GetJSArray(),
+    run_microtasks_fn
+  };
 
-  args.GetReturnValue().Set(ret);
+  args.GetReturnValue().Set(Array::New(isolate, ret, arraysize(ret)));
 }
 
 void PromiseRejectCallback(PromiseRejectMessage message) {
@@ -142,7 +137,6 @@ void SetupPromises(const FunctionCallbackInfo<Value>& args) {
 void SetupBootstrapObject(Environment* env,
                           Local<Object> bootstrapper) {
   BOOTSTRAP_METHOD(_setupTraceCategoryState, SetupTraceCategoryState);
-  BOOTSTRAP_METHOD(_setupProcessObject, SetupProcessObject);
   BOOTSTRAP_METHOD(_setupNextTick, SetupNextTick);
   BOOTSTRAP_METHOD(_setupPromises, SetupPromises);
   BOOTSTRAP_METHOD(_chdir, Chdir);

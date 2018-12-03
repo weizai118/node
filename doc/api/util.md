@@ -183,6 +183,21 @@ property take precedence over `--trace-deprecation` and
 <!-- YAML
 added: v0.5.3
 changes:
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/23162
+    description: The `format` argument is now only taken as such if it actually
+                 contains format specifiers.
+  - version: REPLACEME
+    pr-url: https://github.com/nodejs/node/pull/23162
+    description: If the `format` argument is not a format string, the output
+                 string's formatting is no longer dependent on the type of the
+                 first argument. This change removes previously present quotes
+                 from strings that were being output when the first argument
+                 was not a string.
+  - version: v11.0.0
+    pr-url: https://github.com/nodejs/node/pull/17907
+    description: The `%o` specifier's `depth` option will now fall back to the
+                 default depth.
   - version: v8.4.0
     pr-url: https://github.com/nodejs/node/pull/14558
     description: The `%o` and `%O` specifiers are supported now.
@@ -191,15 +206,13 @@ changes:
 * `format` {string} A `printf`-like format string.
 
 The `util.format()` method returns a formatted string using the first argument
-as a `printf`-like format.
-
-The first argument is a string containing zero or more *placeholder* tokens.
-Each placeholder token is replaced with the converted value from the
-corresponding argument. Supported placeholders are:
+as a `printf`-like format string which can contain zero or more format
+specifiers. Each specifier is replaced with the converted value from the
+corresponding argument. Supported specifiers are:
 
 * `%s` - `String`.
-* `%d` - `Number` (integer or floating point value).
-* `%i` - Integer.
+* `%d` - `Number` (integer or floating point value) or `BigInt`.
+* `%i` - Integer or `BigInt`.
 * `%f` - Floating point value.
 * `%j` - JSON. Replaced with the string `'[Circular]'` if the argument
 contains circular references.
@@ -214,37 +227,40 @@ contains circular references.
 * `%%` - single percent sign (`'%'`). This does not consume an argument.
 * Returns: {string} The formatted string
 
-If the placeholder does not have a corresponding argument, the placeholder is
-not replaced.
+If a specifier does not have a corresponding argument, it is not replaced:
 
 ```js
 util.format('%s:%s', 'foo');
 // Returns: 'foo:%s'
 ```
 
-If there are more arguments passed to the `util.format()` method than the number
-of placeholders, the extra arguments are coerced into strings then concatenated
-to the returned string, each delimited by a space. Excessive arguments whose
-`typeof` is `'object'` or `'symbol'` (except `null`) will be transformed by
-`util.inspect()`.
+Values that are not part of the format string are formatted using
+`util.inspect()` if their type is either `'object'`, `'symbol'`, `'function'`
+or `'number'` and using `String()` in all other cases.
+
+If there are more arguments passed to the `util.format()` method than the
+number of specifiers, the extra arguments are concatenated to the returned
+string, separated by spaces:
 
 ```js
-util.format('%s:%s', 'foo', 'bar', 'baz'); // 'foo:bar baz'
+util.format('%s:%s', 'foo', 'bar', 'baz');
+// Returns: 'foo:bar baz'
 ```
 
-If the first argument is not a string then `util.format()` returns
-a string that is the concatenation of all arguments separated by spaces.
-Each argument is converted to a string using `util.inspect()`.
+If the first argument does not contain a valid format specifier, `util.format()`
+returns a string that is the concatenation of all arguments separated by spaces:
 
 ```js
-util.format(1, 2, 3); // '1 2 3'
+util.format(1, 2, 3);
+// Returns: '1 2 3'
 ```
 
 If only one argument is passed to `util.format()`, it is returned as it is
-without any formatting.
+without any formatting:
 
 ```js
-util.format('%% %s'); // '%% %s'
+util.format('%% %s');
+// Returns: '%% %s'
 ```
 
 Please note that `util.format()` is a synchronous method that is mainly
@@ -357,13 +373,17 @@ stream.write('With ES6');
 ```
 
 ## util.inspect(object[, options])
+## util.inspect(object[, showHidden[, depth[, colors]]])
 <!-- YAML
 added: v0.3.0
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
+    pr-url: https://github.com/nodejs/node/pull/22846
+    description: The `depth` default changed to `20`.
+  - version: v10.12.0
     pr-url: https://github.com/nodejs/node/pull/22788
     description: The `sorted` option is supported now.
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22756
     description: The inspection output is now limited to about 128 MB. Data
                  above that size will not be fully inspected.
@@ -665,7 +685,7 @@ util.inspect(obj);
 <!-- YAML
 added: v6.6.0
 changes:
-  - version: REPLACEME
+  - version: v10.12.0
     pr-url: https://github.com/nodejs/node/pull/20857
     description: This is now defined as a shared symbol.
 -->
@@ -916,8 +936,8 @@ is not supported.
 <!-- YAML
 added: v8.3.0
 changes:
-  - version: REPLACEME
-    pr-url: REPLACEME
+  - version: v11.0.0
+    pr-url: v11.0.0
     description: The class is now available on the global object.
 -->
 
@@ -977,8 +997,8 @@ mark.
 <!-- YAML
 added: v8.3.0
 changes:
-  - version: REPLACEME
-    pr-url: REPLACEME
+  - version: v11.0.0
+    pr-url: v11.0.0
     description: The class is now available on the global object.
 -->
 
@@ -2156,20 +2176,17 @@ Deprecated predecessor of `console.log`.
 [`'uncaughtException'`]: process.html#process_event_uncaughtexception
 [`'warning'`]: process.html#process_event_warning
 [`Array.isArray()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/isArray
-[`ArrayBuffer`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
 [`ArrayBuffer.isView()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer/isView
-[`assert.deepStrictEqual()`]: assert.html#assert_assert_deepstrictequal_actual_expected_message
+[`ArrayBuffer`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
 [`Buffer.isBuffer()`]: buffer.html#buffer_class_method_buffer_isbuffer_obj
-[`console.error()`]: console.html#console_console_error_data_args
-[`console.log()`]: console.html#console_console_log_data_args
 [`DataView`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/DataView
 [`Date`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date
 [`Error`]: errors.html#errors_class_error
 [`Float32Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Float32Array
 [`Float64Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Float64Array
-[`Int8Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int8Array
 [`Int16Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int16Array
 [`Int32Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int32Array
+[`Int8Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Int8Array
 [`Map`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
 [`Object.assign()`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign
 [`Promise`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
@@ -2177,6 +2194,16 @@ Deprecated predecessor of `console.log`.
 [`Set`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set
 [`SharedArrayBuffer`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer
 [`TypedArray`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray
+[`Uint16Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint16Array
+[`Uint32Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint32Array
+[`Uint8Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array
+[`Uint8ClampedArray`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8ClampedArray
+[`WeakMap`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakMap
+[`WeakSet`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakSet
+[`WebAssembly.Module`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Module
+[`assert.deepStrictEqual()`]: assert.html#assert_assert_deepstrictequal_actual_expected_message
+[`console.error()`]: console.html#console_console_error_data_args
+[`console.log()`]: console.html#console_console_log_data_args
 [`util.format()`]: #util_util_format_format_args
 [`util.inspect()`]: #util_util_inspect_object_options
 [`util.promisify()`]: #util_util_promisify_original
@@ -2185,20 +2212,13 @@ Deprecated predecessor of `console.log`.
 [`util.types.isDate()`]: #util_util_types_isdate_value
 [`util.types.isNativeError()`]: #util_util_types_isnativeerror_value
 [`util.types.isSharedArrayBuffer()`]: #util_util_types_issharedarraybuffer_value
-[`Uint8Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array
-[`Uint8ClampedArray`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint8ClampedArray
-[`Uint16Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint16Array
-[`Uint32Array`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint32Array
-[`WeakMap`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakMap
-[`WeakSet`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WeakSet
-[`WebAssembly.Module`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/Module
+[Common System Errors]: errors.html#errors_common_system_errors
 [Custom inspection functions on Objects]: #util_custom_inspection_functions_on_objects
 [Custom promisified functions]: #util_custom_promisified_functions
 [Customizing `util.inspect` colors]: #util_customizing_util_inspect_colors
 [Internationalization]: intl.html
 [Module Namespace Object]: https://tc39.github.io/ecma262/#sec-module-namespace-exotic-objects
 [WHATWG Encoding Standard]: https://encoding.spec.whatwg.org/
-[Common System Errors]: errors.html#errors_common_system_errors
 [async function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function
 [compare function]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#Parameters
 [constructor]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/constructor

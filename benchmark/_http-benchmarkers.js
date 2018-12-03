@@ -8,7 +8,7 @@ const requirementsURL =
   'https://github.com/nodejs/node/blob/master/doc/guides/writing-and-running-benchmarks.md#http-benchmark-requirements';
 
 // The port used by servers and wrk
-exports.PORT = process.env.PORT || 12346;
+exports.PORT = Number(process.env.PORT) || 12346;
 
 class AutocannonBenchmarker {
   constructor() {
@@ -35,7 +35,7 @@ class AutocannonBenchmarker {
     let result;
     try {
       result = JSON.parse(output);
-    } catch (err) {
+    } catch {
       return undefined;
     }
     if (!result || !result.requests || !result.requests.average) {
@@ -82,10 +82,12 @@ class WrkBenchmarker {
  * works
  */
 class TestDoubleBenchmarker {
-  constructor() {
-    this.name = 'test-double';
+  constructor(type) {
+    // `type` is the type ofbenchmarker. Possible values are 'http' and 'http2'.
+    this.name = `test-double-${type}`;
     this.executable = path.resolve(__dirname, '_test-double-benchmarker.js');
     this.present = fs.existsSync(this.executable);
+    this.type = type;
   }
 
   create(options) {
@@ -94,10 +96,9 @@ class TestDoubleBenchmarker {
       test_url: `http://127.0.0.1:${options.port}${options.path}`,
     }, process.env);
 
-    const child = child_process.fork(this.executable, {
-      silent: true,
-      env
-    });
+    const child = child_process.fork(this.executable,
+                                     [this.type],
+                                     { silent: true, env });
     return child;
   }
 
@@ -105,7 +106,7 @@ class TestDoubleBenchmarker {
     let result;
     try {
       result = JSON.parse(output);
-    } catch (err) {
+    } catch {
       return undefined;
     }
     return result.throughput;
@@ -167,7 +168,8 @@ class H2LoadBenchmarker {
 const http_benchmarkers = [
   new WrkBenchmarker(),
   new AutocannonBenchmarker(),
-  new TestDoubleBenchmarker(),
+  new TestDoubleBenchmarker('http'),
+  new TestDoubleBenchmarker('http2'),
   new H2LoadBenchmarker()
 ];
 

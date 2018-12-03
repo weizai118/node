@@ -3,7 +3,6 @@
 ## Contents
 
 * [Issues and Pull Requests](#issues-and-pull-requests)
-  - [Managing Issues and Pull Requests](#managing-issues-and-pull-requests)
   - [Welcoming First-Time Contributors](#welcoming-first-time-contributors)
   - [Closing Issues and Pull Requests](#closing-issues-and-pull-requests)
   - [Author ready pull requests](#author-ready-pull-requests)
@@ -28,7 +27,7 @@
   - [Using `git-node`](#using-git-node)
   - [Technical HOWTO](#technical-howto)
   - [Troubleshooting](#troubleshooting)
-  - [I Just Made a Mistake](#i-just-made-a-mistake)
+  - [I Made a Mistake](#i-made-a-mistake)
   - [Long Term Support](#long-term-support)
     - [What is LTS?](#what-is-lts)
     - [How does LTS work?](#how-does-lts-work)
@@ -38,77 +37,66 @@
     - [How is an LTS release cut?](#how-is-an-lts-release-cut)
 * [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker)
 
-This document contains information for Collaborators of the Node.js
-project regarding managing the project's code, documentation, and issue tracker.
-
-Collaborators should be familiar with the guidelines for new
-contributors in [CONTRIBUTING.md](./CONTRIBUTING.md) and also
-understand the project governance model as outlined in
-[GOVERNANCE.md](./GOVERNANCE.md).
+This document explains how Collaborators manage the Node.js project.
+Collaborators should understand the
+[guidelines for new contributors](CONTRIBUTING.md) and the
+[project governance model](GOVERNANCE.md).
 
 ## Issues and Pull Requests
 
-### Managing Issues and Pull Requests
-
-Collaborators should take full responsibility for managing issues and pull
-requests they feel qualified to handle. Make sure this is done while being
-mindful of these guidelines, the opinions of other Collaborators, and guidance
-of the [TSC][]. They may also notify other qualified parties for more input on
-an issue or a pull request.
-See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
+Mind these guidelines, the opinions of other Collaborators, and guidance of the
+[TSC][]. Notify other qualified parties for more input on an issue or a pull
+request. See [Who to CC in the issue tracker](#who-to-cc-in-the-issue-tracker).
 
 ### Welcoming First-Time Contributors
 
-Courtesy should always be shown to individuals submitting issues and pull
-requests to the Node.js project. Be welcoming to first-time contributors,
-identified by the GitHub ![First-time contributor](./doc/first_timer_badge.png)
-badge.
+Always show courtesy to individuals submitting issues and pull requests. Be
+welcoming to first-time contributors, identified by the GitHub
+![First-time contributor](./doc/first_timer_badge.png) badge.
 
-For first-time contributors, check if the commit author is the same as the
-pull request author, and ask if they have configured their git
+For first-time contributors, check if the commit author is the same as the pull
+request author. This way, once their pull request lands, GitHub will show them
+as a _Contributor_. Ask if they have configured their git
 [username][git-username] and [email][git-email] to their liking.
-This is to make sure they would be promoted to "contributor" once their
-pull request lands.
 
 ### Closing Issues and Pull Requests
 
-Collaborators may close any issue or pull request they believe is
-not relevant for the future of the Node.js project. Where this is
-unclear, the issue should be left open for several days to allow for
-additional discussion. Where this does not yield input from Node.js
-Collaborators or additional evidence that the issue has relevance, the
-issue may be closed. Remember that issues can always be re-opened if
-necessary.
+Collaborators may close any issue or pull request that is not relevant to the
+future of the Node.js project. Where this is unclear, leave the issue or pull
+request open for several days to allow for discussion. Where this does not yield
+evidence that the issue or pull request has relevance, close it. Remember that
+issues and pull requests can always be re-opened if necessary.
 
 ### Author ready pull requests
 
-A pull request that is still awaiting the minimum review time is considered
-_author ready_ as soon as the CI has been started, it has at least one approval,
-and it has no outstanding review comments. Please always make sure to add the
-`author ready` label to the PR in that case and remove it again as soon as that
-condition is not met anymore.
+A pull request is _author ready_ when:
+
+* There is a CI run in progress or completed.
+* There are at least two Collaborator approvals, or at least one approval if the
+  pull request is older than 7 days.
+* There are no outstanding review comments.
+
+Please always add the `author ready` label to the pull request in that case.
+Please always remove it again as soon as the conditions are not met anymore.
 
 ### Handling own pull requests
 
-When you open a pull request, it is recommended to start a CI right away (see
-[testing and CI](#testing-and-ci) for instructions) and to post the link to it
-in a comment in the pull request. Starting a new CI after each update is also
-recommended (for example, after an additional code change or after rebasing).
+When you open a pull request, [start a CI](#testing-and-ci) right away and post
+the link to it in a comment in the pull request. Later, after new code changes
+or rebasing, start a new CI.
 
-As soon as the PR is ready to land, please do so. Landing your own pull requests
-allows other Collaborators to focus on other pull requests. If your pull request
-is still awaiting the [minimum time to land](#waiting-for-approvals), add the
-`author ready` label so other Collaborators know it can land as soon as the time
-ends.
+As soon as the pull request is ready to land, please do so. This allows other
+Collaborators to focus on other pull requests. If your pull request is not ready
+to land but is [author ready](#author-ready-pull-requests), add the
+`author ready` label. If you wish to land the pull request yourself, use the
+"assign yourself" link to self-assign it.
 
 ## Accepting Modifications
 
-All modifications to the Node.js code and documentation should be performed via
-GitHub pull requests, including modifications by Collaborators and TSC members.
-A pull request must be reviewed, and must also be tested with CI, before being
-landed into the codebase. There may be exceptions to the latter (the changed
-code cannot be tested with a CI or similar). If that is the case, please leave a
-comment that explains why the PR does not require a CI run.
+Contributors propose modifications to Node.js using GitHub pull requests. This
+is true for all modifications including those proposed by TSC members and other
+Collaborators. A pull request must pass code review and CI before landing into
+the codebase.
 
 ### Code Reviews
 
@@ -138,30 +126,26 @@ the CI outcome.
 
 ### Consensus Seeking
 
-If there is no disagreement amongst Collaborators, a pull request should be
-landed given appropriate review, a green CI, and the minimum
-[waiting time](#waiting-for-approvals) for a PR. If it is still awaiting the
-[minimum time to land](#waiting-for-approvals), please add the `author ready`
-label to it so it is obvious that the PR can land as soon as the time ends.
+If there are no objecting Collaborators, a pull request may land if it has the
+needed [approvals](#code-reviews), [CI](#testing-and-ci), and
+[wait time](#waiting-for-approvals). If a pull request meets all requirements
+except the [wait time](#waiting-for-approvals), please add the
+[`author ready`](#author-ready-pull-requests) label.
 
-Where there is discussion amongst Collaborators, consensus should be sought if
-possible. The lack of consensus may indicate the need to elevate discussion to
-the TSC for resolution.
+Where there is disagreement among Collaborators, consensus should be sought if
+possible. If reaching consensus is not possible, a Collaborator may escalate the
+issue to the TSC.
 
-If any Collaborator objects to a change *without giving any additional
-explanation or context*, and the objecting Collaborator fails to respond to
-explicit requests for explanation or context within a reasonable period of
-time, the objection may be dismissed. Note that this does not apply to
-objections that are explained.
+Collaborators should not block a pull request without providing a reason.
+Another Collaborator may ask an objecting Collaborator to explain their
+objection. If the objector is unresponsive, another Collaborator may dismiss the
+objection.
 
-Note that breaking changes (that is, pull requests that require an increase in
-the major version number, known as `semver-major` changes) must be [elevated for
-review by the TSC](#involving-the-tsc). This does not necessarily mean that the
-PR must be put onto the TSC meeting agenda. If multiple TSC members approve
-(`LGTM`) the PR and no Collaborators oppose the PR, it should be landed. Where
-there is disagreement among TSC members or objections from one or more
-Collaborators, `semver-major` pull requests may be put on the TSC meeting
-agenda.
+[Breaking changes](#breaking-changes) must receive
+[TSC review](#involving-the-tsc). If two TSC members approve the pull request
+and no Collaborators object, then it may land. If there are objections, a
+Collaborator may apply the `tsc-agenda` label. That will put the pull request on
+the TSC meeting agenda.
 
 #### Helpful resources
 
@@ -171,10 +155,10 @@ agenda.
 ### Waiting for Approvals
 
 Before landing pull requests, sufficient time should be left for input
-from other Collaborators. In general, leave at least 48 hours during the
-week and 72 hours over weekends to account for international time
-differences and work schedules. However, certain types of pull requests
-can be fast-tracked and may be landed after a shorter delay. For example:
+from other Collaborators. In general, leave at least 48 hours to account for
+international time differences and work schedules. However, certain types of
+pull requests can be fast-tracked and may be landed after a shorter delay. For
+example:
 
 * Focused changes that affect only documentation and/or the test suite:
   * `code-and-learn` tasks typically fall into this category.
@@ -189,7 +173,9 @@ Collaborators that previously approved the pull request. If someone disagrees
 with the fast-tracking request, remove the label and leave a comment indicating
 why the pull request should not be fast-tracked. The pull request can be landed
 once two or more Collaborators approve both the pull request and the
-fast-tracking request, and the necessary CI testing is done.
+fast-tracking request, and the necessary CI testing is done. A request to
+fast-track a PR made by a different Collaborator than the pull-request author
+counts as a fast-track approval.
 
 ### Testing and CI
 
@@ -412,10 +398,6 @@ Pull requests introducing new core modules:
 New core modules must be landed with a [Stability Index][] of Experimental,
 and must remain Experimental until a semver-major release.
 
-For new modules that involve significant effort, non-trivial additions to
-Node.js or significant new capabilities, an [Enhancement Proposal][] is
-recommended but not required.
-
 ### Additions to N-API
 
 N-API provides an ABI stable API that we will have to support in future
@@ -490,9 +472,8 @@ level.
 
 ### Involving the TSC
 
-Collaborators may opt to elevate pull requests or issues to the [TSC][] for
-discussion by assigning the `tsc-review` label or @-mentioning the
-`@nodejs/tsc` GitHub team. This should be done where a pull request:
+Collaborators may opt to elevate pull requests or issues to the [TSC][].
+This should be done where a pull request:
 
 - is labeled `semver-major`, or
 - has a significant impact on the codebase, or
@@ -500,16 +481,25 @@ discussion by assigning the `tsc-review` label or @-mentioning the
 - has failed to reach consensus amongst the Collaborators who are
   actively participating in the discussion.
 
+Assign the `tsc-review` label or @-mention the
+`@nodejs/tsc` GitHub team if you want to elevate an issue to the [TSC][].
+Do not use the GitHub UI on the right-hand side to assign to
+`@nodejs/tsc` or request a review from `@nodejs/tsc`.
+
 The TSC should serve as the final arbiter where required.
 
 ## Landing Pull Requests
 
+1. Avoid landing PRs that are assigned to someone else. Authors who wish to land
+   their own PRs will self-assign them, or delegate to someone else. If in
+   doubt, ask the assignee whether it is okay to land.
 1. Never use GitHub's green ["Merge Pull Request"][] button. Reasons for not
    using the web interface button:
-   * The merge method will add an unnecessary merge commit.
-   * The squash & merge method can add metadata (the PR #) to the commit title.
-   * If more than one author has contributed to the PR, keep the most recent
-     author when squashing.
+   * The "Create a merge commit" method will add an unnecessary merge commit.
+   * The "Squash and merge" method will add metadata (the PR #) to the commit
+     title. If more than one author has contributed to the PR, squashing will
+     only keep the most recent author.
+   * The "Rebase and merge" method has no way of adding metadata to the commit.
 1. Make sure the CI is done and the result is green. If the CI is not green,
    check for flaky tests and infrastructure failures. Please check if those were
    already reported in the appropriate repository ([node][flaky tests] and
@@ -520,13 +510,12 @@ The TSC should serve as the final arbiter where required.
    present.
 1. Review the commit message to ensure that it adheres to the guidelines
    outlined in the [contributing][] guide.
-1. Add all necessary [metadata](#metadata) to commit messages before landing.
-   See the commit log for examples such as [this
-   one](https://github.com/nodejs/node/commit/b636ba8186) if unsure exactly how
-   to format your commit messages.
+1. Add all necessary [metadata](#metadata) to commit messages before landing. If
+   you are unsure exactly how to format the commit messages, use the commit log
+   as a reference. See [this commit][commit-example] as an example.
 
-Check PRs from new contributors to make sure the person's name and email address
-are correct before merging.
+For PRs from first-time contributors, be [welcoming](#welcoming-first-time-contributors).
+Also, verify that their git settings are to their liking.
 
 All commits should be self-contained, meaning every commit should pass all
 tests. This makes it much easier when bisecting to find a breaking change.
@@ -744,7 +733,7 @@ make -j4 test
 git push upstream master
 ```
 
-### I Just Made a Mistake
+### I Made a Mistake
 
 * Ping a TSC member.
 * `#node-dev` on freenode
@@ -800,8 +789,8 @@ TSC for further discussion.
 
 #### How are LTS Branches Managed?
 
-There are multiple LTS branches, e.g. `v8.x` and `v6.x`. Each of these is paired
-with a staging branch: `v8.x-staging` and `v6.x-staging`.
+There are multiple LTS branches, e.g. `v10.x` and `v8.x`. Each of these is
+paired with a staging branch: `v10.x-staging` and `v8.x-staging`.
 
 As commits land on the master branch, they are cherry-picked back to each
 staging branch as appropriate. If the commit applies only to the LTS branch, the
@@ -810,9 +799,8 @@ pulled from the staging branch into the LTS branch only when a release is
 being prepared and may be pulled into the LTS branch in a different order
 than they were landed in staging.
 
-Any Collaborator may land commits into a staging branch, but only the release
-team should land commits into the LTS branch while preparing a new
-LTS release.
+Only the members of the @nodejs/backporters team should land commits onto
+LTS staging branches.
 
 #### How can I help?
 
@@ -823,14 +811,18 @@ on backporting, please see the [backporting guide][].
 
 Several LTS related issue and PR labels have been provided:
 
-* `lts-watch-v6.x` - tells the LTS WG that the issue/PR needs to be considered
-  for landing in the `v6.x-staging` branch.
-* `lts-watch-v4.x` - tells the LTS WG that the issue/PR needs to be considered
-  for landing in the `v4.x-staging` branch.
+* `lts-watch-v10.x` - tells the LTS WG that the issue/PR needs to be
+  considered for landing in the `v10.x-staging` branch.
+* `lts-watch-v8.x` - tells the LTS WG that the issue/PR needs to be
+  considered for landing in the `v8.x-staging` branch.
+* `lts-watch-v6.x` - tells the LTS WG that the issue/PR needs to be
+  considered for landing in the `v6.x-staging` branch.
+* `land-on-v10.x` - tells the release team that the commit should be landed
+  in a future v10.x release.
+* `land-on-v8.x` - tells the release team that the commit should be landed
+  in a future v8.x release.
 * `land-on-v6.x` - tells the release team that the commit should be landed
-  in a future v6.x release
-* `land-on-v4.x` - tells the release team that the commit should be landed
-  in a future v4.x release
+  in a future v6.x release.
 
 Any Collaborator can attach these labels to any PR/issue. As commits are
 landed into the staging branches, the `lts-watch-` label will be removed.
@@ -896,7 +888,6 @@ When things need extra attention, are controversial, or `semver-major`:
 If you cannot find who to cc for a file, `git shortlog -n -s <file>` may help.
 
 ["Merge Pull Request"]: https://help.github.com/articles/merging-a-pull-request/#merging-a-pull-request-on-github
-[Enhancement Proposal]: https://github.com/nodejs/node-eps
 [Stability Index]: doc/api/documentation.md#stability-index
 [TSC]: https://github.com/nodejs/TSC
 [_Deprecation_]: https://en.wikipedia.org/wiki/Deprecation
@@ -905,6 +896,7 @@ If you cannot find who to cc for a file, `git shortlog -n -s <file>` may help.
 [`node-core-utils`]: https://github.com/nodejs/node-core-utils
 [backporting guide]: doc/guides/backporting-to-release-lines.md
 [contributing]: ./doc/guides/contributing/pull-requests.md#commit-message-guidelines
+[commit-example]: https://github.com/nodejs/node/commit/b636ba8186
 [flaky tests]: https://github.com/nodejs/node/issues?q=is%3Aopen+is%3Aissue+label%3A%22CI+%2F+flaky+test%22y
 [git-node]: https://github.com/nodejs/node-core-utils/blob/master/docs/git-node.md
 [git-node-metadata]: https://github.com/nodejs/node-core-utils/blob/master/docs/git-node.md#git-node-metadata

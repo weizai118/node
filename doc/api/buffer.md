@@ -1197,7 +1197,7 @@ console.log(buf1.equals(buf3));
 <!-- YAML
 added: v0.5.0
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/22969
     description: Throws `ERR_OUT_OF_RANGE` instead of `ERR_INDEX_OUT_OF_RANGE`.
   - version: v10.0.0
@@ -1936,6 +1936,14 @@ buf2.swap16();
 // Throws ERR_INVALID_BUFFER_SIZE
 ```
 
+One convenient use of `buf.swap16()` is to perform a fast in-place conversion
+between UTF-16 little-endian and UTF-16 big-endian:
+
+```js
+const buf = Buffer.from('This is little-endian UTF-16', 'utf16le');
+buf.swap16(); // Convert to big-endian UTF-16 text.
+```
+
 ### buf.swap32()
 <!-- YAML
 added: v5.10.0
@@ -2664,9 +2672,9 @@ This value may depend on the JS engine that is being used.
 [`buf.length`]: #buffer_buf_length
 [`buf.slice()`]: #buffer_buf_slice_start_end
 [`buf.values()`]: #buffer_buf_values
-[`buffer.kMaxLength`]: #buffer_buffer_kmaxlength
 [`buffer.constants.MAX_LENGTH`]: #buffer_buffer_constants_max_length
 [`buffer.constants.MAX_STRING_LENGTH`]: #buffer_buffer_constants_max_string_length
+[`buffer.kMaxLength`]: #buffer_buffer_kmaxlength
 [`util.inspect()`]: util.html#util_util_inspect_object_options
 [RFC1345]: https://tools.ietf.org/html/rfc1345
 [RFC4648, Section 5]: https://tools.ietf.org/html/rfc4648#section-5

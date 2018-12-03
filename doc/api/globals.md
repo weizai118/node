@@ -109,7 +109,7 @@ The process object. See the [`process` object][] section.
 
 ## queueMicrotask(callback)
 <!-- YAML
-added: REPLACEME
+added: v11.0.0
 -->
 
 <!-- type=global -->
@@ -119,12 +119,13 @@ added: REPLACEME
 * `callback` {Function} Function to be queued.
 
 The `queueMicrotask()` method queues a microtask to invoke `callback`. If
-`callback` throws an exception, the [`process` object][] `'error'` event will
-be emitted.
+`callback` throws an exception, the [`process` object][] `'uncaughtException'`
+event will be emitted.
 
-In general, `queueMicrotask` is the idiomatic choice over `process.nextTick()`.
-`process.nextTick()` will always run before microtasks, and so unexpected
-execution order may be observed.
+The microtask queue is managed by V8 and may be used in a similar manner to
+the `process.nextTick()` queue, which is managed by Node.js. The
+`process.nextTick()` queue is always processed before the microtask queue
+within each turn of the Node.js event loop.
 
 ```js
 // Here, `queueMicrotask()` is used to ensure the 'load' event is always
@@ -180,7 +181,7 @@ added: v0.0.1
 
 ## TextDecoder
 <!-- YAML
-added: REPLACEME
+added: v11.0.0
 -->
 
 <!-- type=global -->
@@ -189,7 +190,7 @@ The WHATWG `TextDecoder` class. See the [`TextDecoder`][] section.
 
 ## TextEncoder
 <!-- YAML
-added: REPLACEME
+added: v11.0.0
 -->
 
 <!-- type=global -->
@@ -215,6 +216,23 @@ added: v10.0.0
 
 The WHATWG `URLSearchParams` class. See the [`URLSearchParams`][] section.
 
+## WebAssembly
+<!-- YAML
+added: v8.0.0
+-->
+
+<!-- type=global -->
+
+* {Object}
+
+The object that acts as the namespace for all W3C
+[WebAssembly][webassembly-org] related functionality. See the
+[Mozilla Developer Network][webassembly-mdn] for usage and compatibility.
+
+[`TextDecoder`]: util.html#util_class_util_textdecoder
+[`TextEncoder`]: util.html#util_class_util_textencoder
+[`URLSearchParams`]: url.html#url_class_urlsearchparams
+[`URL`]: url.html#url_class_url
 [`__dirname`]: modules.html#modules_dirname
 [`__filename`]: modules.html#modules_filename
 [`clearImmediate`]: timers.html#timers_clearimmediate_immediate
@@ -228,11 +246,9 @@ The WHATWG `URLSearchParams` class. See the [`URLSearchParams`][] section.
 [`setImmediate`]: timers.html#timers_setimmediate_callback_args
 [`setInterval`]: timers.html#timers_setinterval_callback_delay_args
 [`setTimeout`]: timers.html#timers_settimeout_callback_delay_args
-[`TextDecoder`]: util.html#util_class_util_textdecoder
-[`TextEncoder`]: util.html#util_class_util_textencoder
-[`URL`]: url.html#url_class_url
-[`URLSearchParams`]: url.html#url_class_urlsearchparams
 [buffer section]: buffer.html
 [built-in objects]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects
 [module system documentation]: modules.html
 [timers]: timers.html
+[webassembly-mdn]: https://developer.mozilla.org/en-US/docs/WebAssembly
+[webassembly-org]: https://webassembly.org

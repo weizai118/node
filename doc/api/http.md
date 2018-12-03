@@ -368,7 +368,7 @@ proxy.listen(1337, '127.0.0.1', () => {
   // make a request to a tunneling proxy
   const options = {
     port: 1337,
-    hostname: '127.0.0.1',
+    host: '127.0.0.1',
     method: 'CONNECT',
     path: 'www.google.com:80'
   };
@@ -415,7 +415,7 @@ event is emitted with a callback containing an object with a status code.
 const http = require('http');
 
 const options = {
-  hostname: '127.0.0.1',
+  host: '127.0.0.1',
   port: 8080,
   path: '/length_request'
 };
@@ -502,7 +502,7 @@ srv.listen(1337, '127.0.0.1', () => {
   // make a request
   const options = {
     port: 1337,
-    hostname: '127.0.0.1',
+    host: '127.0.0.1',
     headers: {
       'Connection': 'Upgrade',
       'Upgrade': 'websocket'
@@ -532,7 +532,7 @@ in the response to be dropped and the socket to be destroyed.
 <!-- YAML
 added: v0.11.14
 changes:
-  - version: REPLACEME
+  - version: v11.0.0
     pr-url: https://github.com/nodejs/node/pull/20230
     description: The `aborted` property is no longer a timestamp number.
 -->
@@ -575,6 +575,17 @@ If `data` is specified, it is equivalent to calling
 If `callback` is specified, it will be called when the request stream
 is finished.
 
+### request.finished
+<!-- YAML
+added: v0.0.1
+-->
+
+* {boolean}
+
+The `request.finished` property will be `true` if [`request.end()`][]
+has been called. `request.end()` will automatically be called if the
+request was initiated via [`http.get()`][].
+
 ### request.flushHeaders()
 <!-- YAML
 added: v1.6.0
@@ -605,13 +616,13 @@ The type of the return value depends on the arguments provided to
 ```js
 request.setHeader('content-type', 'text/html');
 request.setHeader('Content-Length', Buffer.byteLength(body));
-request.setHeader('Set-Cookie', ['type=ninja', 'language=javascript']);
+request.setHeader('Cookie', ['type=ninja', 'language=javascript']);
 const contentType = request.getHeader('Content-Type');
 // contentType is 'text/html'
 const contentLength = request.getHeader('Content-Length');
 // contentLength is of type number
-const setCookie = request.getHeader('set-cookie');
-// setCookie is of type string[]
+const cookie = request.getHeader('Cookie');
+// cookie is of type string[]
 ```
 
 ### request.maxHeadersCount
@@ -655,7 +666,7 @@ request.setHeader('Content-Type', 'application/json');
 or
 
 ```js
-request.setHeader('Set-Cookie', ['type=ninja', 'language=javascript']);
+request.setHeader('Cookie', ['type=ninja', 'language=javascript']);
 ```
 
 ### request.setNoDelay([noDelay])
@@ -925,6 +936,26 @@ added: v0.1.90
 * `callback` {Function}
 
 Stops the server from accepting new connections. See [`net.Server.close()`][].
+
+### server.headersTimeout
+<!-- YAML
+added: v11.3.0
+-->
+
+* {number} **Default:** `40000`
+
+Limit the amount of time the parser will wait to receive the complete HTTP
+headers.
+
+In case of inactivity, the rules defined in [`server.timeout`][] apply. However,
+that inactivity based timeout would still allow the connection to be kept open
+if the headers are being sent very slowly (by default, up to a byte per 2
+minutes). In order to prevent this, whenever header data arrives an additional
+check is made that more than `server.headersTimeout` milliseconds has not
+passed since the connection was established. If the check fails, a `'timeout'`
+event is emitted on the server object, and (by default) the socket is destroyed.
+See [`server.timeout`][] for more information on how timeout behavior can be
+customized.
 
 ### server.listen()
 
@@ -1500,6 +1531,34 @@ added: v10.1.0
 The `message.aborted` property will be `true` if the request has
 been aborted.
 
+### message.complete
+<!-- YAML
+added: v0.3.0
+-->
+
+* {boolean}
+
+The `message.complete` property will be `true` if a complete HTTP message has
+been received and successfully parsed.
+
+This property is particularly useful as a means of determining if a client or
+server fully transmitted a message before a connection was terminated:
+
+```js
+const req = http.request({
+  host: '127.0.0.1',
+  port: 8080,
+  method: 'POST'
+}, (res) => {
+  res.resume();
+  res.on('end', () => {
+    if (!res.complete)
+      console.error(
+        'The connection was terminated while the message was still being sent');
+  });
+});
+```
+
 ### message.destroy([error])
 <!-- YAML
 added: v0.3.0
@@ -1539,6 +1598,7 @@ header name:
 `last-modified`, `location`, `max-forwards`, `proxy-authorization`, `referer`,
 `retry-after`, or `user-agent` are discarded.
 * `set-cookie` is always an array. Duplicates are added to the array.
+* For duplicate `cookie` headers, the values are joined together with '; '.
 * For all other headers, the values are joined together with ', '.
 
 ### message.httpVersion
@@ -1870,14 +1930,14 @@ changes:
   * `host` {string} A domain name or IP address of the server to issue the
     request to. **Default:** `'localhost'`.
   * `hostname` {string} Alias for `host`. To support [`url.parse()`][],
-    `hostname` is preferred over `host`.
-  * `family` {number} IP address family to use when resolving `host` and
+    `hostname` will be used if both `host` and `hostname` are specified.
+  * `family` {number} IP address family to use when resolving `host` or
     `hostname`. Valid values are `4` or `6`. When unspecified, both IP v4 and
     v6 will be used.
   * `port` {number} Port of remote server. **Default:** `80`.
   * `localAddress` {string} Local interface to bind for network connections.
-  * `socketPath` {string} Unix Domain Socket (use one of `host:port` or
-    `socketPath`).
+  * `socketPath` {string} Unix Domain Socket (cannot be used if one of `host`
+     or `port` is specified, those specify a TCP Socket).
   * `method` {string} A string specifying the HTTP request method. **Default:**
     `'GET'`.
   * `path` {string} Request path. Should include query string if any.
@@ -2051,6 +2111,7 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`http.ClientRequest`]: #http_class_http_clientrequest
 [`http.IncomingMessage`]: #http_class_http_incomingmessage
 [`http.Server`]: #http_class_http_server
+[`http.get()`]: #http_http_get_options_callback
 [`http.globalAgent`]: #http_http_globalagent
 [`http.request()`]: #http_http_request_options_callback
 [`message.headers`]: #http_message_headers
@@ -2064,8 +2125,8 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`request.getHeader()`]: #http_request_getheader_name
 [`request.setHeader()`]: #http_request_setheader_name_value
 [`request.setTimeout()`]: #http_request_settimeout_timeout_callback
-[`request.socket`]: #http_request_socket
 [`request.socket.getPeerCertificate()`]: tls.html#tls_tlssocket_getpeercertificate_detailed
+[`request.socket`]: #http_request_socket
 [`request.write(data, encoding)`]: #http_request_write_chunk_encoding_callback
 [`response.end()`]: #http_response_end_data_encoding_callback
 [`response.getHeader()`]: #http_response_getheader_name
@@ -2084,3 +2145,4 @@ not abort the request or do anything besides add a `'timeout'` event.
 [`socket.unref()`]: net.html#net_socket_unref
 [`url.parse()`]: url.html#url_url_parse_urlstring_parsequerystring_slashesdenotehost
 [Readable Stream]: stream.html#stream_class_stream_readable
+[Stream]: stream.html#stream_stream

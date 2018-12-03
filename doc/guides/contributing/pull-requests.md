@@ -15,7 +15,6 @@ so that you can make the actual changes. This is where we will start.
     * [Commit message guidelines](#commit-message-guidelines)
   * [Step 5: Rebase](#step-5-rebase)
   * [Step 6: Test](#step-6-test)
-    * [Test Coverage](#test-coverage)
   * [Step 7: Push](#step-7-push)
   * [Step 8: Opening the Pull Request](#step-8-opening-the-pull-request)
   * [Step 9: Discuss and Update](#step-9-discuss-and-update)
@@ -30,7 +29,7 @@ so that you can make the actual changes. This is where we will start.
   * [Accept that there are different opinions about what belongs in Node.js](#accept-that-there-are-different-opinions-about-what-belongs-in-nodejs)
   * [Performance is not everything](#performance-is-not-everything)
   * [Continuous Integration Testing](#continuous-integration-testing)
-* [Additional Notes](#additional-notes)
+* [Notes](#notes)
   * [Commit Squashing](#commit-squashing)
   * [Getting Approvals for your Pull Request](#getting-approvals-for-your-pull-request)
   * [CI Testing](#ci-testing)
@@ -195,7 +194,7 @@ One of the existing contributors will help get things situated and the
 contributor landing the Pull Request will ensure that everything follows
 the project guidelines.
 
-See [core-validate-commit](https://github.com/evanlucas/core-validate-commit) -
+See [core-validate-commit](https://github.com/nodejs/core-validate-commit) -
 A utility that ensures commits follow the commit formatting guidelines.
 
 ### Step 5: Rebase
@@ -237,75 +236,7 @@ And on Windows:
 > vcbuild test
 ```
 
-(See the [Building guide][] for more details.)
-
-Make sure the linter does not report any issues and that all tests pass. Please
-do not submit patches that fail either check.
-
-If you want to run the linter without running tests, use
-`make lint`/`vcbuild lint`. It will run both JavaScript linting and
-C++ linting.
-
-If you are updating tests and just want to run a single test to check it:
-
-```text
-$ python tools/test.py -J --mode=release parallel/test-stream2-transform
-```
-
-You can execute the entire suite of tests for a given subsystem
-by providing the name of a subsystem:
-
-```text
-$ python tools/test.py -J --mode=release child-process
-```
-
-If you want to check the other options, please refer to the help by using
-the `--help` option
-
-```text
-$ python tools/test.py --help
-```
-
-You can usually run tests directly with node:
-
-```text
-$ ./node ./test/parallel/test-stream2-transform.js
-```
-
-Remember to recompile with `make -j4` in between test runs if you change code in
-the `lib` or `src` directories.
-
-#### Test Coverage
-
-It's good practice to ensure any code you add or change is covered by tests.
-You can do so by running the test suite with coverage enabled:
-
-```text
-$ ./configure --coverage && make coverage
-```
-
-A detailed coverage report will be written to `coverage/index.html` for
-JavaScript coverage and to `coverage/cxxcoverage.html` for C++ coverage.
-
-_Note that generating a test coverage report can take several minutes._
-
-To collect coverage for a subset of tests you can set the `CI_JS_SUITES` and
-`CI_NATIVE_SUITES` variables:
-
-```text
-$ CI_JS_SUITES=child-process CI_NATIVE_SUITES= make coverage
-```
-
-The above command executes tests for the `child-process` subsystem and
-outputs the resulting coverage report.
-
-Running tests with coverage will create and modify several directories
-and files. To clean up afterwards, run:
-
-```text
-make coverage-clean
-./configure && make -j4.
-```
+(See the [running tests][] section of Building guide for more details.)
 
 ### Step 7: Push
 
@@ -416,7 +347,8 @@ unhelpful is likely safe to ignore.
 ### Step 10: Landing
 
 In order to land, a Pull Request needs to be reviewed and [approved][] by
-at least one Node.js Collaborator and pass a
+at least two Node.js Collaborators (one Collaborator approval is enough if the
+pull request has been open for more than 7 days) and pass a
 [CI (Continuous Integration) test run][]. After that, as long as there are no
 objections from other contributors, the Pull Request can be merged. If you find
 your Pull Request waiting longer than you expect, see the
@@ -496,12 +428,11 @@ There is a minimum waiting time which we try to respect for non-trivial
 changes, so that people who may have important input in such a distributed
 project are able to respond.
 
-For non-trivial changes, Pull Requests must be left open for *at least* 48
-hours during the week, and 72 hours on a weekend. In most cases, when the
-PR is relatively small and focused on a narrow set of changes, these periods
-provide more than enough time to adequately review. Sometimes changes take far
-longer to review, or need more specialized review from subject matter experts.
-When in doubt, do not rush.
+For non-trivial changes, Pull Requests must be left open for at least 48 hours.
+In most cases, when the PR is relatively small and focused on a narrow set of
+changes, that will provide more than enough time to adequately review. Sometimes
+changes take far longer to review, or need more specialized review from subject
+matter experts. When in doubt, do not rush.
 
 Trivial changes, typically limited to small formatting changes or fixes to
 documentation, may be landed within the minimum 48 hour window.
@@ -601,7 +532,7 @@ specific platforms or for so-called "flaky" tests to fail ("be red"). It is
 vital to visually inspect the results of all failed ("red") tests to determine
 whether the failure was caused by the changes in the Pull Request.
 
-## Additional Notes
+## Notes
 
 ### Commit Squashing
 
@@ -643,12 +574,11 @@ If not, you can ask a Collaborator to start a CI run.
 
 ### Waiting Until the Pull Request Gets Landed
 
-A Pull Request needs to stay open for at least 48 hours (72 hours on a
-weekend) from when it is submitted, even after it gets approved and
-passes the CI. This is to make sure that everyone has a chance to
-weigh in. If the changes are trivial, collaborators may decide it
-doesn't need to wait. A Pull Request may well take longer to be
-merged in. All these precautions are important because Node.js is
+A Pull Request needs to stay open for at least 48 hours from when it is
+submitted, even after it gets approved and passes the CI. This is to make sure
+that everyone has a chance to weigh in. If the changes are trivial,
+collaborators may decide it doesn't need to wait. A Pull Request may well take
+longer to be merged in. All these precautions are important because Node.js is
 widely used, so don't be discouraged!
 
 ### Check Out the Collaborator Guide
@@ -663,7 +593,8 @@ If you want to know more about the code review and the landing process, see the
 [Code of Conduct]: https://github.com/nodejs/admin/blob/master/CODE_OF_CONDUCT.md
 [Collaborator Guide]: ../../../COLLABORATOR_GUIDE.md
 [guide for writing tests in Node.js]: ../writing-tests.md
+[hiding-a-comment]: https://help.github.com/articles/managing-disruptive-comments/#hiding-a-comment
 [https://ci.nodejs.org/]: https://ci.nodejs.org/
 [IRC in the #node-dev channel]: https://webchat.freenode.net?channels=node-dev&uio=d4
 [Onboarding guide]: ../../onboarding.md
-[hiding-a-comment]: https://help.github.com/articles/managing-disruptive-comments/#hiding-a-comment
+[running tests]: ../../../BUILDING.md#running-tests

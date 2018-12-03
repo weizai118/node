@@ -179,7 +179,9 @@ inline int StreamBase::Shutdown(v8::Local<v8::Object> req_wrap_obj) {
 
   const char* msg = Error();
   if (msg != nullptr) {
-    req_wrap_obj->Set(env->error_string(), OneByteString(env->isolate(), msg));
+    req_wrap_obj->Set(
+        env->context(),
+        env->error_string(), OneByteString(env->isolate(), msg)).FromJust();
     ClearError();
   }
 
@@ -228,7 +230,9 @@ inline StreamWriteResult StreamBase::Write(
 
   const char* msg = Error();
   if (msg != nullptr) {
-    req_wrap_obj->Set(env->error_string(), OneByteString(env->isolate(), msg));
+    req_wrap_obj->Set(env->context(),
+                      env->error_string(),
+                      OneByteString(env->isolate(), msg)).FromJust();
     ClearError();
   }
 
@@ -275,29 +279,28 @@ void StreamBase::AddMethods(Environment* env, Local<FunctionTemplate> t) {
 
   Local<Signature> signature = Signature::New(env->isolate(), t);
 
-  // TODO(TimothyGu): None of these should have ConstructorBehavior::kAllow.
   Local<FunctionTemplate> get_fd_templ =
       env->NewFunctionTemplate(GetFD<Base>,
                                signature,
-                               v8::ConstructorBehavior::kAllow,
+                               v8::ConstructorBehavior::kThrow,
                                v8::SideEffectType::kHasNoSideEffect);
 
   Local<FunctionTemplate> get_external_templ =
       env->NewFunctionTemplate(GetExternal<Base>,
                                signature,
-                               v8::ConstructorBehavior::kAllow,
+                               v8::ConstructorBehavior::kThrow,
                                v8::SideEffectType::kHasNoSideEffect);
 
   Local<FunctionTemplate> get_bytes_read_templ =
       env->NewFunctionTemplate(GetBytesRead<Base>,
                                signature,
-                               v8::ConstructorBehavior::kAllow,
+                               v8::ConstructorBehavior::kThrow,
                                v8::SideEffectType::kHasNoSideEffect);
 
   Local<FunctionTemplate> get_bytes_written_templ =
       env->NewFunctionTemplate(GetBytesWritten<Base>,
                                signature,
-                               v8::ConstructorBehavior::kAllow,
+                               v8::ConstructorBehavior::kThrow,
                                v8::SideEffectType::kHasNoSideEffect);
 
   t->PrototypeTemplate()->SetAccessorProperty(env->fd_string(),
@@ -435,8 +438,10 @@ inline void StreamReq::Done(int status, const char* error_str) {
   AsyncWrap* async_wrap = GetAsyncWrap();
   Environment* env = async_wrap->env();
   if (error_str != nullptr) {
-    async_wrap->object()->Set(env->error_string(),
-                              OneByteString(env->isolate(), error_str));
+    async_wrap->object()->Set(env->context(),
+                              env->error_string(),
+                              OneByteString(env->isolate(), error_str))
+                              .FromJust();
   }
 
   OnDone(status);

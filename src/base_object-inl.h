@@ -62,7 +62,7 @@ Persistent<v8::Object>& BaseObject::persistent() {
 
 
 v8::Local<v8::Object> BaseObject::object() const {
-  return PersistentToLocal(env_->isolate(), persistent_handle_);
+  return PersistentToLocal::Default(env_->isolate(), persistent_handle_);
 }
 
 v8::Local<v8::Object> BaseObject::object(v8::Isolate* isolate) const {
@@ -95,13 +95,12 @@ void BaseObject::MakeWeak() {
   persistent_handle_.SetWeak(
       this,
       [](const v8::WeakCallbackInfo<BaseObject>& data) {
-        BaseObject* obj = data.GetParameter();
+        std::unique_ptr<BaseObject> obj(data.GetParameter());
         // Clear the persistent handle so that ~BaseObject() doesn't attempt
         // to mess with internal fields, since the JS object may have
         // transitioned into an invalid state.
         // Refs: https://github.com/nodejs/node/issues/18897
         obj->persistent_handle_.Reset();
-        delete obj;
       }, v8::WeakCallbackType::kParameter);
 }
 

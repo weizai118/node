@@ -63,7 +63,7 @@ function init(asyncId, type, triggerAsyncId, resource) { }
 
 // before is called just before the resource's callback is called. It can be
 // called 0-N times for handles (e.g. TCPWrap), and will be called exactly 1
-// time for requests (e.g. FSReqWrap).
+// time for requests (e.g. FSReqCallback).
 function before(asyncId) { }
 
 // after is called just after the resource's callback has finished.
@@ -236,9 +236,9 @@ The `type` is a string identifying the type of resource that caused
 resource's constructor.
 
 ```text
-FSEVENTWRAP, FSREQWRAP, GETADDRINFOREQWRAP, GETNAMEINFOREQWRAP, HTTPPARSER,
+FSEVENTWRAP, FSREQCALLBACK, GETADDRINFOREQWRAP, GETNAMEINFOREQWRAP, HTTPPARSER,
 JSSTREAM, PIPECONNECTWRAP, PIPEWRAP, PROCESSWRAP, QUERYWRAP, SHUTDOWNWRAP,
-SIGNALWRAP, STATWATCHER, TCPCONNECTWRAP, TCPSERVER, TCPWRAP, TTYWRAP,
+SIGNALWRAP, STATWATCHER, TCPCONNECTWRAP, TCPSERVERWRAP, TCPWRAP, TTYWRAP,
 UDPSENDWRAP, UDPWRAP, WRITEWRAP, ZLIB, SSLCONNECTION, PBKDF2REQUEST,
 RANDOMBYTESREQUEST, TLSWRAP, Microtask, Timeout, Immediate, TickObject
 ```
@@ -276,8 +276,8 @@ require('net').createServer((conn) => {}).listen(8080);
 Output when hitting the server with `nc localhost 8080`:
 
 ```console
-TCPSERVERWRAP(2): trigger: 1 execution: 1
-TCPWRAP(4): trigger: 2 execution: 0
+TCPSERVERWRAP(5): trigger: 1 execution: 1
+TCPWRAP(7): trigger: 5 execution: 0
 ```
 
 The `TCPSERVERWRAP` is the server which receives the connections.
@@ -296,13 +296,12 @@ of propagating what resource is responsible for the new resource's existence.
 been initialized. This can contain useful information that can vary based on
 the value of `type`. For instance, for the `GETADDRINFOREQWRAP` resource type,
 `resource` provides the hostname used when looking up the IP address for the
-hostname in `net.Server.listen()`. The API for accessing this information is
+host in `net.Server.listen()`. The API for accessing this information is
 currently not considered public, but using the Embedder API, users can provide
 and document their own resource objects. For example, such a resource object
 could contain the SQL query being executed.
 
-In the case of Promises, the `resource` object will have `promise` property
-that refers to the `Promise` that is being initialized, and an
+In the case of Promises, the `resource` object will have an
 `isChainedPromise` property, set to `true` if the promise has a parent promise,
 and `false` otherwise. For example, in the case of `b = a.then(handler)`, `a` is
 considered a parent `Promise` of `b`. Here, `b` is considered a chained promise.
@@ -355,27 +354,18 @@ require('net').createServer(() => {}).listen(8080, () => {
 Output from only starting the server:
 
 ```console
-TCPSERVERWRAP(2): trigger: 1 execution: 1
-TickObject(3): trigger: 2 execution: 1
-before:  3
-  Timeout(4): trigger: 3 execution: 3
-  TIMERWRAP(5): trigger: 3 execution: 3
-after:   3
-destroy: 3
-before:  5
-  before:  4
-    TTYWRAP(6): trigger: 4 execution: 4
-    SIGNALWRAP(7): trigger: 4 execution: 4
-    TTYWRAP(8): trigger: 4 execution: 4
->>> 4
-    TickObject(9): trigger: 4 execution: 4
-  after:   4
-after:   5
-before:  9
-after:   9
-destroy: 4
-destroy: 9
-destroy: 5
+TCPSERVERWRAP(5): trigger: 1 execution: 1
+TickObject(6): trigger: 5 execution: 1
+before:  6
+  Timeout(7): trigger: 6 execution: 6
+after:   6
+destroy: 6
+before:  7
+>>> 7
+  TickObject(8): trigger: 7 execution: 7
+after:   7
+before:  8
+after:   8
 ```
 
 As illustrated in the example, `executionAsyncId()` and `execution` each specify
@@ -385,7 +375,7 @@ the value of the current execution context; which is delineated by calls to
 Only using `execution` to graph resource allocation results in the following:
 
 ```console
-TTYWRAP(6) -> Timeout(4) -> TIMERWRAP(5) -> TickObject(3) -> root(1)
+Timeout(7) -> TickObject(6) -> root(1)
 ```
 
 The `TCPSERVERWRAP` is not part of this graph, even though it was the reason for
@@ -488,13 +478,12 @@ The ID returned from `executionAsyncId()` is related to execution timing, not
 causality (which is covered by `triggerAsyncId()`):
 
 ```js
-const server = net.createServer(function onConnection(conn) {
+const server = net.createServer((conn) => {
   // Returns the ID of the server, not of the new connection, because the
-  // onConnection callback runs in the execution scope of the server's
-  // MakeCallback().
+  // callback runs in the execution scope of the server's MakeCallback().
   async_hooks.executionAsyncId();
 
-}).listen(port, function onListening() {
+}).listen(port, () => {
   // Returns the ID of a TickObject (i.e. process.nextTick()) because all
   // callbacks passed to .listen() are wrapped in a nextTick().
   async_hooks.executionAsyncId();
@@ -704,6 +693,8 @@ alternative.
 
 #### asyncResource.emitDestroy()
 
+* Returns: {AsyncResource} A reference to `asyncResource`.
+
 Call all `destroy` hooks. This should only ever be called once. An error will
 be thrown if it is called more than once. This **must** be manually called. If
 the resource is left to be collected by the GC then the `destroy` hooks will
@@ -725,5 +716,5 @@ never be called.
 [`init` callback]: #async_hooks_init_asyncid_type_triggerasyncid_resource
 [Hook Callbacks]: #async_hooks_hook_callbacks
 [PromiseHooks]: https://docs.google.com/document/d/1rda3yKGHimKIhg5YeoAmCOtyURgsbTH_qaYR79FELlk/edit
-[promise execution tracking]: #async_hooks_promise_execution_tracking
 [`Worker`]: worker_threads.html#worker_threads_class_worker
+[promise execution tracking]: #async_hooks_promise_execution_tracking

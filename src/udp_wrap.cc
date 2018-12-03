@@ -27,8 +27,6 @@
 #include "req_wrap-inl.h"
 #include "util-inl.h"
 
-
-
 namespace node {
 
 using v8::Array;
@@ -56,11 +54,9 @@ class SendWrap : public ReqWrap<uv_udp_send_t> {
   inline bool have_callback() const;
   size_t msg_size;
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(SendWrap)
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(SendWrap)
+  SET_SELF_SIZE(SendWrap)
 
  private:
   const bool have_callback_;
@@ -135,22 +131,30 @@ void UDPWrap::Initialize(Local<Object> target,
   env->SetProtoMethod(t, "setTTL", SetTTL);
   env->SetProtoMethod(t, "bufferSize", BufferSize);
 
-  AsyncWrap::AddWrapMethods(env, t);
-  HandleWrap::AddWrapMethods(env, t);
+  t->Inherit(HandleWrap::GetConstructorTemplate(env));
 
-  target->Set(udpString, t->GetFunction(env->context()).ToLocalChecked());
+  target->Set(env->context(),
+              udpString,
+              t->GetFunction(env->context()).ToLocalChecked()).FromJust();
   env->set_udp_constructor_function(
       t->GetFunction(env->context()).ToLocalChecked());
 
   // Create FunctionTemplate for SendWrap
   Local<FunctionTemplate> swt =
       BaseObject::MakeLazilyInitializedJSTemplate(env);
-  AsyncWrap::AddWrapMethods(env, swt);
+  swt->Inherit(AsyncWrap::GetConstructorTemplate(env));
   Local<String> sendWrapString =
       FIXED_ONE_BYTE_STRING(env->isolate(), "SendWrap");
   swt->SetClassName(sendWrapString);
-  target->Set(sendWrapString,
-              swt->GetFunction(env->context()).ToLocalChecked());
+  target->Set(env->context(),
+              sendWrapString,
+              swt->GetFunction(env->context()).ToLocalChecked()).FromJust();
+
+  Local<Object> constants = Object::New(env->isolate());
+  NODE_DEFINE_CONSTANT(constants, UV_UDP_IPV6ONLY);
+  target->Set(context,
+              env->constants_string(),
+              constants).FromJust();
 }
 
 
@@ -378,7 +382,7 @@ void UDPWrap::DoSend(const FunctionCallbackInfo<Value>& args, int family) {
 
   // construct uv_buf_t array
   for (size_t i = 0; i < count; i++) {
-    Local<Value> chunk = chunks->Get(i);
+    Local<Value> chunk = chunks->Get(env->context(), i).ToLocalChecked();
 
     size_t length = Buffer::Length(chunk);
 
@@ -526,11 +530,6 @@ Local<Object> UDPWrap::Instantiate(Environment* env,
   Local<Object> instance = env->udp_constructor_function()
       ->NewInstance(env->context()).ToLocalChecked();
   return scope.Escape(instance);
-}
-
-
-uv_udp_t* UDPWrap::UVHandle() {
-  return &handle_;
 }
 
 

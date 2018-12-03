@@ -32,7 +32,7 @@ const http = require('http');
 const url = require('url');
 
 const body = 'hello world\n';
-const server = http.createServer(function(req, res) {
+const server = http.createServer((req, res) => {
   res.writeHead(200, {
     'Content-Length': body.length,
     'Content-Type': 'text/plain'
@@ -45,7 +45,7 @@ let keepAliveReqSec = 0;
 let normalReqSec = 0;
 
 
-function runAb(opts, callback) {
+const runAb = (opts, callback) => {
   const args = [
     '-c', opts.concurrent || 100,
     '-t', opts.threads || 2,
@@ -66,11 +66,9 @@ function runAb(opts, callback) {
 
   let stdout;
 
-  child.stdout.on('data', function(data) {
-    stdout += data;
-  });
+  child.stdout.on('data', (data) => stdout += data);
 
-  child.on('close', function(code, signal) {
+  child.on('close', (code, signal) => {
     if (code) {
       console.error(code, signal);
       process.exit(code);
@@ -90,21 +88,34 @@ function runAb(opts, callback) {
 
     callback(reqSec, keepAliveRequests);
   });
-}
+};
 
 server.listen(common.PORT, () => {
   runAb({ keepalive: true }, (reqSec) => {
     keepAliveReqSec = reqSec;
 
-    runAb({ keepalive: false }, function(reqSec) {
+    runAb({ keepalive: false }, (reqSec) => {
       normalReqSec = reqSec;
       server.close();
     });
   });
 });
 
-process.on('exit', function() {
-  assert.strictEqual(true, normalReqSec > 50);
-  assert.strictEqual(true, keepAliveReqSec > 50);
-  assert.strictEqual(true, normalReqSec < keepAliveReqSec);
+process.on('exit', () => {
+  assert.strictEqual(
+    normalReqSec > 50,
+    true,
+    `normalReqSec should be greater than 50, but got ${normalReqSec}`
+  );
+  assert.strictEqual(
+    keepAliveReqSec > 50,
+    true,
+    `keepAliveReqSec should be greater than 50, but got ${keepAliveReqSec}`
+  );
+  assert.strictEqual(
+    normalReqSec < keepAliveReqSec,
+    true,
+    'normalReqSec should be less than keepAliveReqSec, ' +
+    `but ${normalReqSec} is greater than ${keepAliveReqSec}`
+  );
 });

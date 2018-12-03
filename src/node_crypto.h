@@ -81,6 +81,7 @@ using EVPKeyPointer = DeleteFnPtr<EVP_PKEY, EVP_PKEY_free>;
 using EVPKeyCtxPointer = DeleteFnPtr<EVP_PKEY_CTX, EVP_PKEY_CTX_free>;
 using EVPMDPointer = DeleteFnPtr<EVP_MD_CTX, EVP_MD_CTX_free>;
 using RSAPointer = DeleteFnPtr<RSA, RSA_free>;
+using ECPointer = DeleteFnPtr<EC_KEY, EC_KEY_free>;
 using BignumPointer = DeleteFnPtr<BIGNUM, BN_free>;
 using NetscapeSPKIPointer = DeleteFnPtr<NETSCAPE_SPKI, NETSCAPE_SPKI_free>;
 using ECGroupPointer = DeleteFnPtr<EC_GROUP, EC_GROUP_free>;
@@ -88,16 +89,12 @@ using ECPointPointer = DeleteFnPtr<EC_POINT, EC_POINT_free>;
 using ECKeyPointer = DeleteFnPtr<EC_KEY, EC_KEY_free>;
 using DHPointer = DeleteFnPtr<DH, DH_free>;
 
-enum CheckResult {
-  CHECK_CERT_REVOKED = 0,
-  CHECK_OK = 1
-};
-
 extern int VerifyCallback(int preverify_ok, X509_STORE_CTX* ctx);
 
 extern void UseExtraCaCerts(const std::string& file);
 
 void InitCryptoOnce();
+std::string GetOpenSSLVersion();
 
 class SecureContext : public BaseObject {
  public:
@@ -107,11 +104,10 @@ class SecureContext : public BaseObject {
 
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(SecureContext)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(SecureContext)
+  SET_SELF_SIZE(SecureContext)
 
   SSLCtxPointer ctx_;
   X509Pointer cert_;
@@ -171,6 +167,7 @@ class SecureContext : public BaseObject {
       const v8::FunctionCallbackInfo<v8::Value>& args);
   static void EnableTicketKeyCallback(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void CtxGetter(const v8::FunctionCallbackInfo<v8::Value>& info);
 
   template <bool primary>
   static void GetCertificate(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -276,6 +273,7 @@ class SSLWrap {
 
   static void GetPeerCertificate(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetCertificate(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetPeerFinished(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetSession(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -347,11 +345,10 @@ class CipherBase : public BaseObject {
  public:
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(CipherBase)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(CipherBase)
+  SET_SELF_SIZE(CipherBase)
 
  protected:
   enum CipherKind {
@@ -436,11 +433,10 @@ class Hmac : public BaseObject {
  public:
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(Hmac)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(Hmac)
+  SET_SELF_SIZE(Hmac)
 
  protected:
   void HmacInit(const char* hash_type, const char* key, int key_len);
@@ -465,11 +461,10 @@ class Hash : public BaseObject {
  public:
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(Hash)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(Hash)
+  SET_SELF_SIZE(Hash)
 
   bool HashInit(const char* hash_type);
   bool HashUpdate(const char* data, int len);
@@ -510,11 +505,10 @@ class SignBase : public BaseObject {
   Error Init(const char* sign_type);
   Error Update(const char* data, int len);
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(SignBase)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(SignBase)
+  SET_SELF_SIZE(SignBase)
 
  protected:
   void CheckThrow(Error error);
@@ -526,13 +520,22 @@ class Sign : public SignBase {
  public:
   static void Initialize(Environment* env, v8::Local<v8::Object> target);
 
-  Error SignFinal(const char* key_pem,
-                  int key_pem_len,
-                  const char* passphrase,
-                  unsigned char* sig,
-                  unsigned int* sig_len,
-                  int padding,
-                  int saltlen);
+  struct SignResult {
+    Error error;
+    MallocedBuffer<unsigned char> signature;
+
+    explicit SignResult(
+        Error err,
+        MallocedBuffer<unsigned char>&& sig = MallocedBuffer<unsigned char>())
+      : error(err), signature(std::move(sig)) {}
+  };
+
+  SignResult SignFinal(
+      const char* key_pem,
+      int key_pem_len,
+      const char* passphrase,
+      int padding,
+      int saltlen);
 
  protected:
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -623,16 +626,14 @@ class DiffieHellman : public BaseObject {
 
   DiffieHellman(Environment* env, v8::Local<v8::Object> wrap)
       : BaseObject(env, wrap),
-        initialised_(false),
         verifyError_(0) {
     MakeWeak();
   }
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(DiffieHellman)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(DiffieHellman)
+  SET_SELF_SIZE(DiffieHellman)
 
  private:
   static void GetField(const v8::FunctionCallbackInfo<v8::Value>& args,
@@ -642,7 +643,6 @@ class DiffieHellman : public BaseObject {
                      int (*set_field)(DH*, BIGNUM*), const char* what);
   bool VerifyContext();
 
-  bool initialised_;
   int verifyError_;
   DHPointer dh_;
 };
@@ -659,11 +659,10 @@ class ECDH : public BaseObject {
                                       char* data,
                                       size_t len);
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(ECDH)
+  // TODO(joyeecheung): track the memory used by OpenSSL types
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(ECDH)
+  SET_SELF_SIZE(ECDH)
 
  protected:
   ECDH(Environment* env, v8::Local<v8::Object> wrap, ECKeyPointer&& key)

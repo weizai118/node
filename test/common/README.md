@@ -13,6 +13,7 @@ This directory contains modules used to test the Node.js implementation.
 * [Heap dump checker module](#heap-dump-checker-module)
 * [HTTP2 module](#http2-module)
 * [Internet module](#internet-module)
+* [tick module](#tick-module)
 * [tmpdir module](#tmpdir-module)
 * [WPT module](#wpt-module)
 
@@ -52,10 +53,9 @@ symlinks
 ([SeCreateSymbolicLinkPrivilege](https://msdn.microsoft.com/en-us/library/windows/desktop/bb530716(v=vs.85).aspx)).
 On non-Windows platforms, this always returns `true`.
 
-### ddCommand(filename, kilobytes)
-* return [&lt;Object>]
+### createZeroFilledFile(filename)
 
-Platform normalizes the `dd` command
+Creates a 10 MB file of all null characters.
 
 ### disableCrashOnUnhandledRejection()
 
@@ -214,11 +214,6 @@ Platform check for SunOS.
 
 Platform check for Windows.
 
-### isWOW64
-* [&lt;boolean>]
-
-Platform check for Windows 32-bit on Windows 64-bit.
-
 ### localhostIPv4
 * [&lt;string>]
 
@@ -239,17 +234,6 @@ exactly `exact` number of times when the test is complete, then the test will
 fail.
 
 If `fn` is not provided, an empty function will be used.
-
-### mustCallAsync([fn][, exact])
-* `fn` [&lt;Function>]
-* `exact` [&lt;number>] default = 1
-* return [&lt;Function>]
-
-The same as `mustCall()`, except that it is also checked that the Promise
-returned by the function is fulfilled for each invocation of the function.
-
-The return value of the wrapped function is the return value of the original
-function, if necessary wrapped as a promise.
 
 ### mustCallAtLeast([fn][, minimum])
 * `fn` [&lt;Function>] default = () => {}
@@ -287,10 +271,12 @@ See `common.expectWarning()` for usage.
 Indicates whether 'opensslCli' is supported.
 
 ### platformTimeout(ms)
-* `ms` [&lt;number>]
-* return [&lt;number>]
+* `ms` [&lt;number>|&lt;bigint>]
+* return [&lt;number>|&lt;bigint>]
 
-Platform normalizes timeout.
+Returns a timeout value based on detected conditions. For example, a debug build
+may need extra time so the returned value will be larger than on a release
+build.
 
 ### PIPE
 * [&lt;string>]
@@ -761,6 +747,16 @@ a full `setImmediate()` invocation passes.
 should not be in scope when `listener.ongc()` is created.
 
 
+## tick Module
+
+The `tick` module provides a helper function that can be used to call a callback
+after a given number of event loop "ticks".
+
+### tick(x, cb)
+
+* `x` [&lt;number>] Number of event loop "ticks".
+* `cb` [&lt;Function>] A callback function.
+
 ## tmpdir Module
 
 The `tmpdir` module supports the use of a temporary directory for testing.
@@ -776,12 +772,19 @@ Deletes and recreates the testing temporary directory.
 
 ## WPT Module
 
-The wpt.js module is a port of parts of
-[W3C testharness.js](https://github.com/w3c/testharness.js) for testing the
-Node.js
-[WHATWG URL API](https://nodejs.org/api/url.html#url_the_whatwg_url_api)
-implementation with tests from
-[W3C Web Platform Tests](https://github.com/w3c/web-platform-tests).
+### harness
+
+A legacy port of [Web Platform Tests][] harness.
+
+See the source code for definitions. Please avoid using it in new
+code - the current usage of this port in tests is being migrated to
+the original WPT harness, see [the WPT tests README][].
+
+### Class: WPTRunner
+
+A driver class for running WPT with the WPT harness in a vm.
+
+See [the WPT tests README][] for details.
 
 
 [&lt;Array>]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array
@@ -796,3 +799,5 @@ implementation with tests from
 [`hijackstdio.hijackStdErr()`]: #hijackstderrlistener
 [`hijackstdio.hijackStdOut()`]: #hijackstdoutlistener
 [internationalization]: https://github.com/nodejs/node/wiki/Intl
+[Web Platform Tests]: https://github.com/web-platform-tests/wpt
+[the WPT tests README]: ../wpt/README.md

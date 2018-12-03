@@ -24,6 +24,7 @@ struct HostPort {
 class Options {
  public:
   virtual void CheckOptions(std::vector<std::string>* errors) {}
+  virtual ~Options() {}
 };
 
 // These options are currently essentially per-Environment, but it can be nice
@@ -90,6 +91,11 @@ class EnvironmentOptions : public Options {
   std::string eval_string;
   bool print_eval = false;
   bool force_repl = false;
+
+#if HAVE_OPENSSL
+  bool tls_v1_0 = false;
+  bool tls_v1_1 = false;
+#endif
 
   std::vector<std::string> preload_modules;
 
@@ -230,7 +236,7 @@ class OptionsParser {
   void AddAlias(const std::string& from,
                 const std::initializer_list<std::string>& to);
 
-  // Add implications from some arbitary option to a boolean one, either
+  // Add implications from some arbitrary option to a boolean one, either
   // in a way that makes `from` set `to` to true or to false.
   void Implies(const std::string& from, const std::string& to);
   void ImpliesNot(const std::string& from, const std::string& to);

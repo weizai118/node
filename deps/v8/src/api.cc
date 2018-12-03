@@ -2157,6 +2157,10 @@ int PrimitiveArray::Length() const {
   return array->length();
 }
 
+void PrimitiveArray::Set(int index, Local<Primitive> item) {
+  return Set(Isolate::GetCurrent(), index, item);
+}
+
 void PrimitiveArray::Set(Isolate* v8_isolate, int index,
                          Local<Primitive> item) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
@@ -2168,6 +2172,10 @@ void PrimitiveArray::Set(Isolate* v8_isolate, int index,
                   "array length");
   i::Handle<i::Object> i_item = Utils::OpenHandle(*item);
   array->set(index, *i_item);
+}
+
+Local<Primitive> PrimitiveArray::Get(int index) {
+  return Get(Isolate::GetCurrent(), index);
 }
 
 Local<Primitive> PrimitiveArray::Get(Isolate* v8_isolate, int index) {
@@ -2899,6 +2907,10 @@ void Message::PrintCurrentStackTrace(Isolate* isolate, FILE* out) {
 
 
 // --- S t a c k T r a c e ---
+
+Local<StackFrame> StackTrace::GetFrame(uint32_t index) const {
+  return GetFrame(Isolate::GetCurrent(), index);
+}
 
 Local<StackFrame> StackTrace::GetFrame(Isolate* v8_isolate,
                                        uint32_t index) const {
@@ -3876,6 +3888,36 @@ void v8::RegExp::CheckCast(v8::Value* that) {
 }
 
 
+bool Value::BooleanValue() const {
+  return BooleanValue(Isolate::GetCurrent()->GetCurrentContext())
+      .FromJust();
+}
+
+
+double Value::NumberValue() const {
+  return NumberValue(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(std::numeric_limits<double>::quiet_NaN());
+}
+
+
+int64_t Value::IntegerValue() const {
+  return IntegerValue(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(0);
+}
+
+
+uint32_t Value::Uint32Value() const {
+  return Uint32Value(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(0);
+}
+
+
+int32_t Value::Int32Value() const {
+  return Int32Value(Isolate::GetCurrent()->GetCurrentContext())
+      .FromMaybe(0);
+}
+
+
 Maybe<bool> Value::BooleanValue(Local<Context> context) const {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(context->GetIsolate());
   return Just(Utils::OpenHandle(this)->BooleanValue(isolate));
@@ -3961,6 +4003,12 @@ MaybeLocal<Uint32> Value::ToArrayIndex(Local<Context> context) const {
     RETURN_ESCAPED(Utils::Uint32ToLocal(value));
   }
   return Local<Uint32>();
+}
+
+
+bool Value::Equals(Local<Value> that) const {
+  return Equals(Isolate::GetCurrent()->GetCurrentContext(), that)
+      .FromMaybe(false);
 }
 
 
@@ -5295,6 +5343,10 @@ bool String::ContainsOnlyOneByte() const {
   return helper.Check(*str);
 }
 
+int String::Utf8Length() const {
+  return Utf8Length(Isolate::GetCurrent());
+}
+
 int String::Utf8Length(Isolate* isolate) const {
   i::Handle<i::String> str = Utils::OpenHandle(this);
   str = i::String::Flatten(reinterpret_cast<i::Isolate*>(isolate), str);
@@ -5518,6 +5570,14 @@ static bool RecursivelySerializeToUtf8(i::String* current,
   return true;
 }
 
+
+int String::WriteUtf8(char* buffer, int capacity,
+                      int* nchars_ref, int options) const {
+  return WriteUtf8(Isolate::GetCurrent(),
+                   buffer, capacity, nchars_ref, options);
+}
+
+
 int String::WriteUtf8(Isolate* v8_isolate, char* buffer, int capacity,
                       int* nchars_ref, int options) const {
   i::Handle<i::String> str = Utils::OpenHandle(this);
@@ -5582,6 +5642,18 @@ static inline int WriteHelper(i::Isolate* isolate, const String* string,
     buffer[end - start] = '\0';
   }
   return end - start;
+}
+
+
+int String::WriteOneByte(uint8_t* buffer, int start,
+                         int length, int options) const {
+  return WriteOneByte(Isolate::GetCurrent(), buffer, start, length, options);
+}
+
+
+int String::Write(uint16_t* buffer, int start, int length,
+                  int options) const {
+  return Write(Isolate::GetCurrent(), buffer, start, length, options);
 }
 
 
@@ -6532,6 +6604,11 @@ MaybeLocal<String> String::NewFromTwoByte(Isolate* isolate,
   return result;
 }
 
+Local<String> v8::String::Concat(Local<String> left,
+                                 Local<String> right) {
+  return Concat(Isolate::GetCurrent(), left, right);
+}
+
 Local<String> v8::String::Concat(Isolate* v8_isolate, Local<String> left,
                                  Local<String> right) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
@@ -6758,6 +6835,11 @@ bool v8::BooleanObject::ValueOf() const {
 }
 
 
+Local<v8::Value> v8::StringObject::New(Local<String> value) {
+  return New(Isolate::GetCurrent(), value);
+}
+
+
 Local<v8::Value> v8::StringObject::New(Isolate* v8_isolate,
                                        Local<String> value) {
   i::Handle<i::String> string = Utils::OpenHandle(*value);
@@ -6899,6 +6981,23 @@ Local<v8::Array> v8::Array::New(Isolate* isolate, int length) {
   return Utils::ToLocal(obj);
 }
 
+Local<v8::Array> v8::Array::New(Isolate* isolate, Local<Value>* elements,
+                                size_t length) {
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i::Factory* factory = i_isolate->factory();
+  LOG_API(i_isolate, Array, New);
+  ENTER_V8_NO_SCRIPT_NO_EXCEPTION(i_isolate);
+  int len = static_cast<int>(length);
+
+  i::Handle<i::FixedArray> result = factory->NewFixedArray(len);
+  for (int i = 0; i < len; i++) {
+    i::Handle<i::Object> element = Utils::OpenHandle(*elements[i]);
+    result->set(i, *element);
+  }
+
+  return Utils::ToLocal(
+      factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS, len));
+}
 
 uint32_t v8::Array::Length() const {
   i::Handle<i::JSArray> obj = Utils::OpenHandle(this);
@@ -7004,30 +7103,30 @@ i::Handle<i::JSArray> MapAsArray(i::Isolate* isolate, i::Object* table_obj,
   i::Factory* factory = isolate->factory();
   i::Handle<i::OrderedHashMap> table(i::OrderedHashMap::cast(table_obj),
                                      isolate);
-  if (offset >= table->NumberOfElements()) return factory->NewJSArray(0);
-  int length = (table->NumberOfElements() - offset) *
-               (kind == MapAsArrayKind::kEntries ? 2 : 1);
-  i::Handle<i::FixedArray> result = factory->NewFixedArray(length);
+  const bool collect_keys =
+      kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kKeys;
+  const bool collect_values =
+      kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues;
+  int capacity = table->UsedCapacity();
+  int max_length =
+      (capacity - offset) * ((collect_keys && collect_values) ? 2 : 1);
+  i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
   int result_index = 0;
   {
     i::DisallowHeapAllocation no_gc;
-    int capacity = table->UsedCapacity();
     i::Oddball* the_hole = i::ReadOnlyRoots(isolate).the_hole_value();
-    for (int i = 0; i < capacity; ++i) {
+    for (int i = offset; i < capacity; ++i) {
       i::Object* key = table->KeyAt(i);
       if (key == the_hole) continue;
-      if (offset-- > 0) continue;
-      if (kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kKeys) {
-        result->set(result_index++, key);
-      }
-      if (kind == MapAsArrayKind::kEntries || kind == MapAsArrayKind::kValues) {
-        result->set(result_index++, table->ValueAt(i));
-      }
+      if (collect_keys) result->set(result_index++, key);
+      if (collect_values) result->set(result_index++, table->ValueAt(i));
     }
   }
-  DCHECK_EQ(result_index, result->length());
-  DCHECK_EQ(result_index, length);
-  return factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS, length);
+  DCHECK_GE(max_length, result_index);
+  if (result_index == 0) return factory->NewJSArray(0);
+  result->Shrink(isolate, result_index);
+  return factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS,
+                                         result_index);
 }
 
 }  // namespace
@@ -7112,24 +7211,26 @@ i::Handle<i::JSArray> SetAsArray(i::Isolate* isolate, i::Object* table_obj,
   i::Factory* factory = isolate->factory();
   i::Handle<i::OrderedHashSet> table(i::OrderedHashSet::cast(table_obj),
                                      isolate);
-  int length = table->NumberOfElements() - offset;
-  if (length <= 0) return factory->NewJSArray(0);
-  i::Handle<i::FixedArray> result = factory->NewFixedArray(length);
+  // Elements skipped by |offset| may already be deleted.
+  int capacity = table->UsedCapacity();
+  int max_length = capacity - offset;
+  if (max_length == 0) return factory->NewJSArray(0);
+  i::Handle<i::FixedArray> result = factory->NewFixedArray(max_length);
   int result_index = 0;
   {
     i::DisallowHeapAllocation no_gc;
-    int capacity = table->UsedCapacity();
     i::Oddball* the_hole = i::ReadOnlyRoots(isolate).the_hole_value();
-    for (int i = 0; i < capacity; ++i) {
+    for (int i = offset; i < capacity; ++i) {
       i::Object* key = table->KeyAt(i);
       if (key == the_hole) continue;
-      if (offset-- > 0) continue;
       result->set(result_index++, key);
     }
   }
-  DCHECK_EQ(result_index, result->length());
-  DCHECK_EQ(result_index, length);
-  return factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS, length);
+  DCHECK_GE(max_length, result_index);
+  if (result_index == 0) return factory->NewJSArray(0);
+  result->Shrink(isolate, result_index);
+  return factory->NewJSArrayWithElements(result, i::PACKED_ELEMENTS,
+                                         result_index);
 }
 }  // namespace
 
@@ -7298,14 +7399,6 @@ WasmCompiledModule::BufferReference WasmCompiledModule::GetWasmWireBytesRef() {
       i::Handle<i::WasmModuleObject>::cast(Utils::OpenHandle(this));
   i::Vector<const uint8_t> bytes_vec = obj->native_module()->wire_bytes();
   return {bytes_vec.start(), bytes_vec.size()};
-}
-
-Local<String> WasmCompiledModule::GetWasmWireBytes() {
-  BufferReference ref = GetWasmWireBytesRef();
-  CHECK_LE(ref.size, String::kMaxLength);
-  return String::NewFromOneByte(GetIsolate(), ref.start, NewStringType::kNormal,
-                                static_cast<int>(ref.size))
-      .ToLocalChecked();
 }
 
 WasmCompiledModule::TransferrableModule
@@ -8893,6 +8986,9 @@ bool MicrotasksScope::IsRunningMicrotasks(Isolate* v8Isolate) {
   return isolate->IsRunningMicrotasks();
 }
 
+String::Utf8Value::Utf8Value(v8::Local<v8::Value> obj)
+  : Utf8Value(Isolate::GetCurrent(), obj) {}
+
 String::Utf8Value::Utf8Value(v8::Isolate* isolate, v8::Local<v8::Value> obj)
     : str_(nullptr), length_(0) {
   if (obj.IsEmpty()) return;
@@ -8911,6 +9007,9 @@ String::Utf8Value::Utf8Value(v8::Isolate* isolate, v8::Local<v8::Value> obj)
 String::Utf8Value::~Utf8Value() {
   i::DeleteArray(str_);
 }
+
+String::Value::Value(v8::Local<v8::Value> obj)
+  : Value(Isolate::GetCurrent(), obj) {}
 
 String::Value::Value(v8::Isolate* isolate, v8::Local<v8::Value> obj)
     : str_(nullptr), length_(0) {
@@ -10033,6 +10132,11 @@ void CpuProfiler::SetIdle(bool is_idle) {
   i::CpuProfiler* profiler = reinterpret_cast<i::CpuProfiler*>(this);
   i::Isolate* isolate = profiler->isolate();
   isolate->SetIdle(is_idle);
+}
+
+void CpuProfiler::UseDetailedSourcePositionsForProfiling(Isolate* isolate) {
+  reinterpret_cast<i::Isolate*>(isolate)
+      ->set_detailed_source_positions_for_profiling(true);
 }
 
 uintptr_t CodeEvent::GetCodeStartAddress() {

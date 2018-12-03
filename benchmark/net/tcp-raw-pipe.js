@@ -17,10 +17,12 @@ const bench = common.createBenchmark(main, {
 });
 
 function main({ dur, len, type }) {
-  const { internalBinding } = require('internal/test/binding');
-  const { TCP, constants: TCPConstants } = process.binding('tcp_wrap');
-  const { TCPConnectWrap } = process.binding('tcp_wrap');
-  const { WriteWrap } = internalBinding('stream_wrap');
+  const {
+    TCP,
+    TCPConnectWrap,
+    constants: TCPConstants
+  } = common.binding('tcp_wrap');
+  const { WriteWrap } = common.binding('stream_wrap');
   const PORT = common.PORT;
 
   function fail(err, syscall) {
@@ -41,15 +43,15 @@ function main({ dur, len, type }) {
     if (err)
       fail(err, 'connect');
 
-    clientHandle.onread = function(nread, buffer) {
+    clientHandle.onread = function(buffer) {
       // we're not expecting to ever get an EOF from the client.
       // just lots of data forever.
-      if (nread < 0)
-        fail(nread, 'read');
+      if (!buffer)
+        fail('read');
 
       const writeReq = new WriteWrap();
       writeReq.async = false;
-      err = clientHandle.writeBuffer(writeReq, buffer);
+      err = clientHandle.writeBuffer(writeReq, Buffer.from(buffer));
 
       if (err)
         fail(err, 'write');
@@ -87,11 +89,11 @@ function main({ dur, len, type }) {
   if (err)
     fail(err, 'connect');
 
-  clientHandle.onread = function(nread, buffer) {
-    if (nread < 0)
-      fail(nread, 'read');
+  clientHandle.onread = function(buffer) {
+    if (!buffer)
+      fail('read');
 
-    bytes += buffer.length;
+    bytes += buffer.byteLength;
   };
 
   connectReq.oncomplete = function(err) {

@@ -6,18 +6,23 @@ namespace util {
 
 using v8::ALL_PROPERTIES;
 using v8::Array;
+using v8::Boolean;
 using v8::Context;
 using v8::Function;
 using v8::FunctionCallbackInfo;
+using v8::IndexFilter;
 using v8::Integer;
 using v8::Isolate;
+using v8::KeyCollectionMode;
 using v8::Local;
+using v8::NewStringType;
 using v8::Object;
 using v8::ONLY_CONFIGURABLE;
 using v8::ONLY_ENUMERABLE;
 using v8::ONLY_WRITABLE;
 using v8::Private;
 using v8::Promise;
+using v8::PropertyFilter;
 using v8::Proxy;
 using v8::SKIP_STRINGS;
 using v8::SKIP_SYMBOLS;
@@ -37,13 +42,13 @@ static void GetOwnNonIndexProperties(
 
   Local<Array> properties;
 
-  v8::PropertyFilter filter =
-    static_cast<v8::PropertyFilter>(args[1].As<Uint32>()->Value());
+  PropertyFilter filter =
+    static_cast<PropertyFilter>(args[1].As<Uint32>()->Value());
 
   if (!object->GetPropertyNames(
-        context, v8::KeyCollectionMode::kOwnOnly,
+        context, KeyCollectionMode::kOwnOnly,
         filter,
-        v8::IndexFilter::kSkipIndices)
+        IndexFilter::kSkipIndices)
           .ToLocal(&properties)) {
     return;
   }
@@ -58,13 +63,13 @@ static void GetPromiseDetails(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
 
   Local<Promise> promise = args[0].As<Promise>();
-  Local<Array> ret = Array::New(isolate, 2);
 
   int state = promise->State();
-  ret->Set(0, Integer::New(isolate, state));
+  Local<Value> values[2] = { Integer::New(isolate, state) };
+  size_t number_of_values = 1;
   if (state != Promise::PromiseState::kPending)
-    ret->Set(1, promise->Result());
-
+    values[number_of_values++] = promise->Result();
+  Local<Array> ret = Array::New(isolate, values, number_of_values);
   args.GetReturnValue().Set(ret);
 }
 
@@ -75,11 +80,13 @@ static void GetProxyDetails(const FunctionCallbackInfo<Value>& args) {
 
   Local<Proxy> proxy = args[0].As<Proxy>();
 
-  Local<Array> ret = Array::New(args.GetIsolate(), 2);
-  ret->Set(0, proxy->GetTarget());
-  ret->Set(1, proxy->GetHandler());
+  Local<Value> ret[] = {
+    proxy->GetTarget(),
+    proxy->GetHandler()
+  };
 
-  args.GetReturnValue().Set(ret);
+  args.GetReturnValue().Set(
+      Array::New(args.GetIsolate(), ret, arraysize(ret)));
 }
 
 static void PreviewEntries(const FunctionCallbackInfo<Value>& args) {
@@ -94,11 +101,13 @@ static void PreviewEntries(const FunctionCallbackInfo<Value>& args) {
   // Fast path for WeakMap, WeakSet and Set iterators.
   if (args.Length() == 1)
     return args.GetReturnValue().Set(entries);
-  Local<Array> ret = Array::New(env->isolate(), 2);
-  ret->Set(env->context(), 0, entries).FromJust();
-  ret->Set(env->context(), 1, v8::Boolean::New(env->isolate(), is_key_value))
-      .FromJust();
-  return args.GetReturnValue().Set(ret);
+
+  Local<Value> ret[] = {
+    entries,
+    Boolean::New(env->isolate(), is_key_value)
+  };
+  return args.GetReturnValue().Set(
+      Array::New(env->isolate(), ret, arraysize(ret)));
 }
 
 // Side effect-free stringification that will never throw exceptions.
@@ -171,7 +180,7 @@ void SafeGetenv(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue()
       .Set(String::NewFromUtf8(
             args.GetIsolate(), text.c_str(),
-            v8::NewStringType::kNormal).ToLocalChecked());
+            NewStringType::kNormal).ToLocalChecked());
 }
 
 void EnqueueMicrotask(const FunctionCallbackInfo<Value>& args) {
@@ -197,12 +206,6 @@ void Initialize(Local<Object> target,
     PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(V)
   }
 #undef V
-
-  target->DefineOwnProperty(
-    env->context(),
-    OneByteString(env->isolate(), "pushValToArrayMax"),
-    Integer::NewFromUnsigned(env->isolate(), NODE_PUSH_VAL_TO_ARRAY_MAX),
-    v8::ReadOnly).FromJust();
 
 #define V(name)                                                               \
   target->Set(context,                                                        \

@@ -37,6 +37,7 @@
 #include <functional>  // std::function
 #include <set>
 #include <string>
+#include <array>
 #include <unordered_map>
 
 namespace node {
@@ -77,23 +78,15 @@ inline T MultiplyWithOverflowCheck(T a, T b);
 // whether V8 is initialized.
 void LowMemoryNotification();
 
-#ifdef __GNUC__
-#define NO_RETURN __attribute__((noreturn))
-#else
-#define NO_RETURN
-#endif
-
 // The slightly odd function signature for Assert() is to ease
 // instruction cache pressure in calls from CHECK.
-NO_RETURN void Abort();
-NO_RETURN void Assert(const char* const (*args)[4]);
+[[noreturn]] void Abort();
+[[noreturn]] void Assert(const char* const (*args)[4]);
 void DumpBacktrace(FILE* fp);
 
 #define DISALLOW_COPY_AND_ASSIGN(TypeName)                                    \
-  void operator=(const TypeName&) = delete;                                   \
-  void operator=(TypeName&&) = delete;                                        \
   TypeName(const TypeName&) = delete;                                         \
-  TypeName(TypeName&&) = delete
+  TypeName& operator=(const TypeName&) = delete
 
 // Windows 8+ does not like abort() in Release mode
 #ifdef _WIN32
@@ -206,30 +199,8 @@ class ContainerOfHelper {
 // Calculate the address of the outer (i.e. embedding) struct from
 // the interior pointer to a data member.
 template <typename Inner, typename Outer>
-inline ContainerOfHelper<Inner, Outer> ContainerOf(Inner Outer::*field,
-                                                   Inner* pointer);
-
-// If persistent.IsWeak() == false, then do not call persistent.Reset()
-// while the returned Local<T> is still in scope, it will destroy the
-// reference to the object.
-template <class TypeName>
-inline v8::Local<TypeName> PersistentToLocal(
-    v8::Isolate* isolate,
-    const Persistent<TypeName>& persistent);
-
-// Unchecked conversion from a non-weak Persistent<T> to Local<T>,
-// use with care!
-//
-// Do not call persistent.Reset() while the returned Local<T> is still in
-// scope, it will destroy the reference to the object.
-template <class TypeName>
-inline v8::Local<TypeName> StrongPersistentToLocal(
-    const Persistent<TypeName>& persistent);
-
-template <class TypeName>
-inline v8::Local<TypeName> WeakPersistentToLocal(
-    v8::Isolate* isolate,
-    const Persistent<TypeName>& persistent);
+constexpr ContainerOfHelper<Inner, Outer> ContainerOf(Inner Outer::*field,
+                                                      Inner* pointer);
 
 // Convenience wrapper around v8::String::NewFromOneByte().
 inline v8::Local<v8::String> OneByteString(v8::Isolate* isolate,
@@ -252,6 +223,14 @@ inline v8::Local<v8::String> FIXED_ONE_BYTE_STRING(
     const char(&data)[N]) {
   return OneByteString(isolate, data, N - 1);
 }
+
+template <std::size_t N>
+inline v8::Local<v8::String> FIXED_ONE_BYTE_STRING(
+    v8::Isolate* isolate,
+    const std::array<char, N>& arr) {
+  return OneByteString(isolate, arr.data(), N - 1);
+}
+
 
 
 // Swaps bytes in place. nbytes is the number of bytes to swap and must be a
@@ -447,11 +426,16 @@ struct MallocedBuffer {
     return ret;
   }
 
+  void Truncate(size_t new_size) {
+    CHECK(new_size <= size);
+    size = new_size;
+  }
+
   inline bool is_empty() const { return data == nullptr; }
 
-  MallocedBuffer() : data(nullptr) {}
+  MallocedBuffer() : data(nullptr), size(0) {}
   explicit MallocedBuffer(size_t size) : data(Malloc<T>(size)), size(size) {}
-  MallocedBuffer(char* data, size_t size) : data(data), size(size) {}
+  MallocedBuffer(T* data, size_t size) : data(data), size(size) {}
   MallocedBuffer(MallocedBuffer&& other) : data(other.data), size(other.size) {
     other.data = nullptr;
   }

@@ -9,6 +9,8 @@
     'library%': 'static_library',     # allow override to 'shared_library' for DLL/.so builds
     'component%': 'static_library',   # NB. these names match with what V8 expects
     'msvs_multi_core_compile': '0',   # we do enable multicore compiles, but not using the V8 way
+    'enable_pgo_generate%': '0',
+    'enable_pgo_use%': '0',
     'python%': 'python',
 
     'node_shared%': 'false',
@@ -18,18 +20,18 @@
     'node_module_version%': '',
     'node_with_ltcg%': '',
     'node_use_pch%': 'false',
+    'node_shared_openssl%': 'false',
 
     'node_tag%': '',
     'uv_library%': 'static_library',
 
-    'openssl_fips%': '',
+    'clang%': 0,
 
-    # Default to -O0 for debug builds.
-    'v8_optimized_debug%': 0,
+    'openssl_fips%': '',
 
     # Reset this number to 0 on major V8 upgrades.
     # Increment by one for each non-official patch applied to deps/v8.
-    'v8_embedder_string': '-node.2',
+    'v8_embedder_string': '-node.13',
 
     # Enable disassembler for `--print-code` v8 options
     'v8_enable_disassembler': 1,
@@ -49,6 +51,12 @@
     'icu_use_data_file_flag%': 0,
 
     'conditions': [
+      ['target_arch=="arm64"', {
+        # Disabled pending https://github.com/nodejs/node/issues/23913.
+        'openssl_no_asm%': 1,
+      }, {
+        'openssl_no_asm%': 0,
+      }],
       ['GENERATOR=="ninja"', {
         'obj_dir': '<(PRODUCT_DIR)/obj',
         'conditions': [
@@ -91,8 +99,6 @@
       }],
       ['OS=="mac"', {
         'clang%': 1,
-      }, {
-        'clang%': 0,
       }],
     ],
   },
@@ -262,6 +268,14 @@
         }
       }
     },
+
+    # Defines these mostly for node-gyp to pickup, and warn addon authors of
+    # imminent V8 deprecations, also to sync how dependencies are configured.
+    'defines': [
+      'V8_DEPRECATION_WARNINGS',
+      'V8_IMMINENT_DEPRECATION_WARNINGS',
+    ],
+
     # Forcibly disable -Werror.  We support a wide range of compilers, it's
     # simply not feasible to squelch all warnings, never mind that the
     # libraries in deps/ are not under our control.
@@ -504,7 +518,18 @@
         'ldflags': [
           '-Wl,--export-dynamic',
         ],
-      }]
+      }],
+      ['node_shared_openssl!="true"', {
+        # `OPENSSL_THREADS` is defined via GYP for openSSL for all architectures.
+        'defines': [
+          'OPENSSL_THREADS',
+        ],
+      }],
+      ['node_shared_openssl!="true" and openssl_no_asm==1', {
+        'defines': [
+          'OPENSSL_NO_ASM',
+        ],
+      }],
     ],
   }
 }

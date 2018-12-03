@@ -58,13 +58,7 @@ TLSWrap::TLSWrap(Environment* env,
                 AsyncWrap::PROVIDER_TLSWRAP),
       SSLWrap<TLSWrap>(env, sc, kind),
       StreamBase(env),
-      sc_(sc),
-      write_size_(0),
-      started_(false),
-      established_(false),
-      shutdown_(false),
-      cycle_depth_(0),
-      eof_(false) {
+      sc_(sc) {
   MakeWeak();
 
   // sc comes from an Unwrap. Make sure it was assigned.
@@ -219,17 +213,22 @@ void TLSWrap::SSLInfoCallback(const SSL* ssl_, int where, int ret) {
   Local<Object> object = c->object();
 
   if (where & SSL_CB_HANDSHAKE_START) {
-    Local<Value> callback = object->Get(env->onhandshakestart_string());
-    if (callback->IsFunction()) {
+    Local<Value> callback;
+
+    if (object->Get(env->context(), env->onhandshakestart_string())
+          .ToLocal(&callback) && callback->IsFunction()) {
       Local<Value> argv[] = { env->GetNow() };
       c->MakeCallback(callback.As<Function>(), arraysize(argv), argv);
     }
   }
 
   if (where & SSL_CB_HANDSHAKE_DONE) {
+    Local<Value> callback;
+
     c->established_ = true;
-    Local<Value> callback = object->Get(env->onhandshakedone_string());
-    if (callback->IsFunction()) {
+
+    if (object->Get(env->context(), env->onhandshakedone_string())
+          .ToLocal(&callback) && callback->IsFunction()) {
       c->MakeCallback(callback.As<Function>(), 0, nullptr);
     }
   }
@@ -820,7 +819,10 @@ int TLSWrap::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
 
   // Call the SNI callback and use its return value as context
   Local<Object> object = p->object();
-  Local<Value> ctx = object->Get(env->sni_context_string());
+  Local<Value> ctx;
+
+  if (!object->Get(env->context(), env->sni_context_string()).ToLocal(&ctx))
+    return SSL_TLSEXT_ERR_NOACK;
 
   // Not an object, probably undefined or null
   if (!ctx->IsObject())
@@ -858,7 +860,6 @@ void TLSWrap::GetWriteQueueSize(const FunctionCallbackInfo<Value>& info) {
 
 
 void TLSWrap::MemoryInfo(MemoryTracker* tracker) const {
-  tracker->TrackThis(this);
   tracker->TrackField("error", error_);
   tracker->TrackField("pending_cleartext_input", pending_cleartext_input_);
   if (enc_in_ != nullptr)
@@ -891,7 +892,7 @@ void TLSWrap::Initialize(Local<Object> target,
       Local<FunctionTemplate>(),
       static_cast<PropertyAttribute>(ReadOnly | DontDelete));
 
-  AsyncWrap::AddWrapMethods(env, t, AsyncWrap::kFlagHasReset);
+  t->Inherit(AsyncWrap::GetConstructorTemplate(env));
   env->SetProtoMethod(t, "receive", Receive);
   env->SetProtoMethod(t, "start", Start);
   env->SetProtoMethod(t, "setVerifyMode", SetVerifyMode);
@@ -908,7 +909,9 @@ void TLSWrap::Initialize(Local<Object> target,
   env->set_tls_wrap_constructor_function(
       t->GetFunction(env->context()).ToLocalChecked());
 
-  target->Set(tlsWrapString, t->GetFunction(env->context()).ToLocalChecked());
+  target->Set(env->context(),
+              tlsWrapString,
+              t->GetFunction(env->context()).ToLocalChecked()).FromJust();
 }
 
 }  // namespace node

@@ -116,9 +116,7 @@ Worker::Worker(Environment* env, Local<Object> wrap, const std::string& url)
     Context::Scope context_scope(context);
 
     // TODO(addaleax): Use CreateEnvironment(), or generally another public API.
-    env_.reset(new Environment(isolate_data_.get(),
-                               context,
-                               nullptr));
+    env_.reset(new Environment(isolate_data_.get(), context));
     CHECK_NE(env_, nullptr);
     env_->set_abort_on_uncaught_exception(false);
     env_->set_worker_context(this);
@@ -150,13 +148,13 @@ void Worker::Run() {
       TRACE_STR_COPY(name.c_str()));
   MultiIsolatePlatform* platform = isolate_data_->platform();
   CHECK_NE(platform, nullptr);
-  bool inspector_started = false;
 
   Debug(this, "Starting worker with id %llu", thread_id_);
   {
     Locker locker(isolate_);
     Isolate::Scope isolate_scope(isolate_);
     SealHandleScope outer_seal(isolate_);
+    bool inspector_started = false;
 
     {
       Context::Scope context_scope(env_->context());
@@ -482,8 +480,8 @@ void InitWorker(Local<Object> target,
     Local<FunctionTemplate> w = env->NewFunctionTemplate(Worker::New);
 
     w->InstanceTemplate()->SetInternalFieldCount(1);
+    w->Inherit(AsyncWrap::GetConstructorTemplate(env));
 
-    AsyncWrap::AddWrapMethods(env, w);
     env->SetProtoMethod(w, "startThread", Worker::StartThread);
     env->SetProtoMethod(w, "stopThread", Worker::StopThread);
     env->SetProtoMethod(w, "ref", Worker::Ref);
@@ -492,7 +490,9 @@ void InitWorker(Local<Object> target,
     Local<String> workerString =
         FIXED_ONE_BYTE_STRING(env->isolate(), "Worker");
     w->SetClassName(workerString);
-    target->Set(workerString, w->GetFunction(env->context()).ToLocalChecked());
+    target->Set(env->context(),
+                workerString,
+                w->GetFunction(env->context()).ToLocalChecked()).FromJust();
   }
 
   env->SetMethod(target, "getEnvMessagePort", GetEnvMessagePort);

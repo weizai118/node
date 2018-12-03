@@ -264,7 +264,9 @@ class StreamBase : public StreamResource {
   virtual bool IsIPCPipe();
   virtual int GetFD();
 
-  void CallJSOnreadMethod(ssize_t nread, v8::Local<v8::Object> buf);
+  void CallJSOnreadMethod(ssize_t nread,
+                          v8::Local<v8::ArrayBuffer> ab,
+                          size_t offset = 0);
 
   // This is named `stream_env` to avoid name clashes, because a lot of
   // subclasses are also `BaseObject`s.
@@ -326,12 +328,24 @@ class StreamBase : public StreamResource {
       const v8::FunctionCallbackInfo<v8::Value>& args)>
   static void JSMethod(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+  // Internal, used only in StreamBase methods + env.cc.
+  enum StreamBaseStateFields {
+    kReadBytesOrError,
+    kArrayBufferOffset,
+    kBytesWritten,
+    kLastWriteWasAsync,
+    kNumStreamBaseStateFields
+  };
+
  private:
   Environment* env_;
   EmitToJSStreamListener default_listener_;
 
+  void SetWriteResult(const StreamWriteResult& res);
+
   friend class WriteWrap;
   friend class ShutdownWrap;
+  friend class Environment;  // For kNumStreamBaseStateFields.
 };
 
 
@@ -347,11 +361,9 @@ class SimpleShutdownWrap : public ShutdownWrap, public OtherBase {
 
   AsyncWrap* GetAsyncWrap() override { return this; }
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-  }
-
-  ADD_MEMORY_INFO_NAME(SimpleShutdownWrap)
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(SimpleShutdownWrap)
+  SET_SELF_SIZE(SimpleShutdownWrap)
 };
 
 template <typename OtherBase>
@@ -362,13 +374,9 @@ class SimpleWriteWrap : public WriteWrap, public OtherBase {
 
   AsyncWrap* GetAsyncWrap() override { return this; }
 
-  void MemoryInfo(MemoryTracker* tracker) const override {
-    tracker->TrackThis(this);
-    tracker->TrackFieldWithSize("storage", StorageSize());
-  }
-
-
-  ADD_MEMORY_INFO_NAME(SimpleWriteWrap)
+  SET_NO_MEMORY_INFO()
+  SET_MEMORY_INFO_NAME(SimpleWriteWrap)
+  SET_SELF_SIZE(SimpleWriteWrap)
 };
 
 }  // namespace node

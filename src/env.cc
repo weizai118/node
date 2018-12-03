@@ -1,12 +1,14 @@
-#include "node_internals.h"
 #include "async_wrap.h"
-#include "v8-profiler.h"
 #include "node_buffer.h"
-#include "node_platform.h"
-#include "node_file.h"
 #include "node_context_data.h"
+#include "node_file.h"
+#include "node_internals.h"
+#include "node_native_module.h"
+#include "node_platform.h"
 #include "node_worker.h"
 #include "tracing/agent.h"
+#include "tracing/traced_value.h"
+#include "v8-profiler.h"
 
 #include <stdio.h>
 #include <algorithm>
@@ -14,6 +16,8 @@
 namespace node {
 
 using v8::Context;
+using v8::EmbedderGraph;
+using v8::External;
 using v8::Function;
 using v8::FunctionTemplate;
 using v8::HandleScope;
@@ -21,17 +25,42 @@ using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Message;
+using v8::NewStringType;
 using v8::Number;
+using v8::Object;
 using v8::Private;
+using v8::Promise;
+using v8::PromiseHookType;
 using v8::StackFrame;
 using v8::StackTrace;
 using v8::String;
 using v8::Symbol;
+using v8::TracingController;
 using v8::TryCatch;
+using v8::Undefined;
 using v8::Value;
 using worker::Worker;
 
 #define kTraceCategoryCount 1
+
+// TODO(@jasnell): Likely useful to move this to util or node_internal to
+// allow reuse. But since we're not reusing it yet...
+class TraceEventScope {
+ public:
+  TraceEventScope(const char* category,
+                  const char* name,
+                  void* id) : category_(category), name_(name), id_(id) {
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(category_, name_, id_);
+  }
+  ~TraceEventScope() {
+    TRACE_EVENT_NESTABLE_ASYNC_END0(category_, name_, id_);
+  }
+
+ private:
+  const char* category_;
+  const char* name_;
+  void* id_;
+};
 
 int const Environment::kNodeContextTag = 0x6e6f64;
 void* Environment::kNodeContextTagPtr = const_cast<void*>(
@@ -69,7 +98,7 @@ IsolateData::IsolateData(Isolate* isolate,
             String::NewFromOneByte(                                         \
                 isolate,                                                    \
                 reinterpret_cast<const uint8_t*>(StringValue),              \
-                v8::NewStringType::kInternalized,                           \
+                NewStringType::kInternalized,                               \
                 sizeof(StringValue) - 1).ToLocalChecked()));
   PER_ISOLATE_PRIVATE_SYMBOL_PROPERTIES(V)
 #undef V
@@ -81,7 +110,7 @@ IsolateData::IsolateData(Isolate* isolate,
             String::NewFromOneByte(                                         \
                 isolate,                                                    \
                 reinterpret_cast<const uint8_t*>(StringValue),              \
-                v8::NewStringType::kInternalized,                           \
+                NewStringType::kInternalized,                               \
                 sizeof(StringValue) - 1).ToLocalChecked()));
   PER_ISOLATE_SYMBOL_PROPERTIES(V)
 #undef V
@@ -91,7 +120,7 @@ IsolateData::IsolateData(Isolate* isolate,
         String::NewFromOneByte(                                             \
             isolate,                                                        \
             reinterpret_cast<const uint8_t*>(StringValue),                  \
-            v8::NewStringType::kInternalized,                               \
+            NewStringType::kInternalized,                                   \
             sizeof(StringValue) - 1).ToLocalChecked());
   PER_ISOLATE_STRING_PROPERTIES(V)
 #undef V
@@ -108,43 +137,54 @@ void InitThreadLocalOnce() {
 }
 
 void Environment::TrackingTraceStateObserver::UpdateTraceCategoryState() {
+  if (!env_->is_main_thread()) {
+    // Ideally, we’d have a consistent story that treats all threads/Environment
+    // instances equally here. However, tracing is essentially global, and this
+    // callback is called from whichever thread calls `StartTracing()` or
+    // `StopTracing()`. The only way to do this in a threadsafe fashion
+    // seems to be only tracking this from the main thread, and only allowing
+    // these state modifications from the main thread.
+    return;
+  }
+
   env_->trace_category_state()[0] =
       *TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACING_CATEGORY_NODE1(async_hooks));
 
   Isolate* isolate = env_->isolate();
+  HandleScope handle_scope(isolate);
   Local<Function> cb = env_->trace_category_state_function();
   if (cb.IsEmpty())
     return;
   TryCatch try_catch(isolate);
   try_catch.SetVerbose(true);
-  cb->Call(env_->context(), v8::Undefined(isolate),
+  cb->Call(env_->context(), Undefined(isolate),
            0, nullptr).ToLocalChecked();
 }
 
 Environment::Environment(IsolateData* isolate_data,
-                         Local<Context> context,
-                         tracing::AgentWriterHandle* tracing_agent_writer)
+                         Local<Context> context)
     : isolate_(context->GetIsolate()),
       isolate_data_(isolate_data),
-      tracing_agent_writer_(tracing_agent_writer),
       immediate_info_(context->GetIsolate()),
       tick_info_(context->GetIsolate()),
       timer_base_(uv_now(isolate_data->event_loop())),
       printed_error_(false),
       abort_on_uncaught_exception_(false),
       emit_env_nonstring_warning_(true),
+      emit_err_name_warning_(true),
       makecallback_cntr_(0),
       should_abort_on_uncaught_toggle_(isolate_, 1),
       trace_category_state_(isolate_, kTraceCategoryCount),
+      stream_base_state_(isolate_, StreamBase::kNumStreamBaseStateFields),
       http_parser_buffer_(nullptr),
-      fs_stats_field_array_(isolate_, kFsStatsFieldsLength * 2),
-      fs_stats_field_bigint_array_(isolate_, kFsStatsFieldsLength * 2),
+      fs_stats_field_array_(isolate_, kFsStatsBufferLength),
+      fs_stats_field_bigint_array_(isolate_, kFsStatsBufferLength),
       context_(context->GetIsolate(), context) {
   // We'll be creating new objects so make sure we've entered the context.
-  v8::HandleScope handle_scope(isolate());
-  v8::Context::Scope context_scope(context);
-  set_as_external(v8::External::New(isolate(), this));
+  HandleScope handle_scope(isolate());
+  Context::Scope context_scope(context);
+  set_as_external(External::New(isolate(), this));
 
   // We create new copies of the per-Environment option sets, so that it is
   // easier to modify them after Environment creation. The defaults are
@@ -161,10 +201,9 @@ Environment::Environment(IsolateData* isolate_data,
 
   AssignToContext(context, ContextInfo(""));
 
-  if (tracing_agent_writer_ != nullptr) {
-    trace_state_observer_.reset(new TrackingTraceStateObserver(this));
-    v8::TracingController* tracing_controller =
-        tracing_agent_writer_->GetTracingController();
+  if (tracing::AgentWriterHandle* writer = GetTracingAgentWriter()) {
+    trace_state_observer_ = std::make_unique<TrackingTraceStateObserver>(this);
+    TracingController* tracing_controller = writer->GetTracingController();
     if (tracing_controller != nullptr)
       tracing_controller->AddTraceStateObserver(trace_state_observer_.get());
   }
@@ -202,7 +241,7 @@ Environment::~Environment() {
   // CleanupHandles() should have removed all of them.
   CHECK(file_handle_read_wrap_freelist_.empty());
 
-  v8::HandleScope handle_scope(isolate());
+  HandleScope handle_scope(isolate());
 
 #if HAVE_INSPECTOR
   // Destroy inspector agent before erasing the context. The inspector
@@ -213,9 +252,10 @@ Environment::~Environment() {
   context()->SetAlignedPointerInEmbedderData(
       ContextEmbedderIndex::kEnvironment, nullptr);
 
-  if (tracing_agent_writer_ != nullptr) {
-    v8::TracingController* tracing_controller =
-        tracing_agent_writer_->GetTracingController();
+  if (trace_state_observer_) {
+    tracing::AgentWriterHandle* writer = GetTracingAgentWriter();
+    CHECK_NOT_NULL(writer);
+    TracingController* tracing_controller = writer->GetTracingController();
     if (tracing_controller != nullptr)
       tracing_controller->RemoveTraceStateObserver(trace_state_observer_.get());
   }
@@ -223,6 +263,9 @@ Environment::~Environment() {
   delete[] heap_statistics_buffer_;
   delete[] heap_space_statistics_buffer_;
   delete[] http_parser_buffer_;
+
+  TRACE_EVENT_NESTABLE_ASYNC_END0(
+    TRACING_CATEGORY_NODE1(environment), "Environment", this);
 }
 
 void Environment::Start(const std::vector<std::string>& args,
@@ -230,6 +273,23 @@ void Environment::Start(const std::vector<std::string>& args,
                         bool start_profiler_idle_notifier) {
   HandleScope handle_scope(isolate());
   Context::Scope context_scope(context());
+
+  if (*TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
+      TRACING_CATEGORY_NODE1(environment)) != 0) {
+    auto traced_value = tracing::TracedValue::Create();
+    traced_value->BeginArray("args");
+    for (const std::string& arg : args)
+      traced_value->AppendString(arg);
+    traced_value->EndArray();
+    traced_value->BeginArray("exec_args");
+    for (const std::string& arg : exec_args)
+      traced_value->AppendString(arg);
+    traced_value->EndArray();
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
+      TRACING_CATEGORY_NODE1(environment),
+      "Environment", this,
+      "args", std::move(traced_value));
+  }
 
   CHECK_EQ(0, uv_timer_init(event_loop(), timer_handle()));
   uv_unref(reinterpret_cast<uv_handle_t*>(timer_handle()));
@@ -359,7 +419,7 @@ void Environment::PrintSyncTrace() const {
     return;
 
   HandleScope handle_scope(isolate());
-  Local<v8::StackTrace> stack =
+  Local<StackTrace> stack =
       StackTrace::CurrentStackTrace(isolate(), 10, StackTrace::kDetailed);
 
   fprintf(stderr, "(node:%d) WARNING: Detected use of sync API\n",
@@ -400,6 +460,8 @@ void Environment::PrintSyncTrace() const {
 }
 
 void Environment::RunCleanup() {
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "RunCleanup", this);
   CleanupHandles();
 
   while (!cleanup_hooks_.empty()) {
@@ -431,6 +493,8 @@ void Environment::RunCleanup() {
 }
 
 void Environment::RunBeforeExitCallbacks() {
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "BeforeExit", this);
   for (ExitCallback before_exit : before_exit_functions_) {
     before_exit.cb_(before_exit.arg_);
   }
@@ -442,6 +506,8 @@ void Environment::BeforeExit(void (*cb)(void* arg), void* arg) {
 }
 
 void Environment::RunAtExitCallbacks() {
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "AtExit", this);
   for (ExitCallback at_exit : at_exit_functions_) {
     at_exit.cb_(at_exit.arg_);
   }
@@ -488,27 +554,30 @@ bool Environment::RemovePromiseHook(promise_hook_func fn, void* arg) {
   return true;
 }
 
-void Environment::EnvPromiseHook(v8::PromiseHookType type,
-                                 v8::Local<v8::Promise> promise,
-                                 v8::Local<v8::Value> parent) {
-  Local<v8::Context> context = promise->CreationContext();
+void Environment::EnvPromiseHook(PromiseHookType type,
+                                 Local<Promise> promise,
+                                 Local<Value> parent) {
+  Local<Context> context = promise->CreationContext();
 
   Environment* env = Environment::GetCurrent(context);
   if (env == nullptr) return;
-
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "EnvPromiseHook", env);
   for (const PromiseHookCallback& hook : env->promise_hooks_) {
     hook.cb_(type, promise, parent, hook.arg_);
   }
 }
 
 void Environment::RunAndClearNativeImmediates() {
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "RunAndClearNativeImmediates", this);
   size_t count = native_immediate_callbacks_.size();
   if (count > 0) {
     size_t ref_count = 0;
     std::vector<NativeImmediateCallback> list;
     native_immediate_callbacks_.swap(list);
     auto drain_list = [&]() {
-      v8::TryCatch try_catch(isolate());
+      TryCatch try_catch(isolate());
       for (auto it = list.begin(); it != list.end(); ++it) {
 #ifdef DEBUG
         v8::SealHandleScope seal_handle_scope(isolate());
@@ -554,6 +623,8 @@ void Environment::ToggleTimerRef(bool ref) {
 
 void Environment::RunTimers(uv_timer_t* handle) {
   Environment* env = Environment::from_timer_handle(handle);
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "RunTimers", env);
 
   if (!env->can_call_into_js())
     return;
@@ -576,10 +647,10 @@ void Environment::RunTimers(uv_timer_t* handle) {
     ret = cb->Call(env->context(), process, 1, &arg);
   } while (ret.IsEmpty() && env->can_call_into_js());
 
-  // NOTE(apapirovski): If it ever becomes possibble that `call_into_js` above
+  // NOTE(apapirovski): If it ever becomes possible that `call_into_js` above
   // is reset back to `true` after being previously set to `false` then this
   // code becomes invalid and needs to be rewritten. Otherwise catastrophic
-  // timers corruption will occurr and all timers behaviour will become
+  // timers corruption will occur and all timers behaviour will become
   // entirely unpredictable.
   if (ret.IsEmpty())
     return;
@@ -614,6 +685,8 @@ void Environment::RunTimers(uv_timer_t* handle) {
 
 void Environment::CheckImmediate(uv_check_t* handle) {
   Environment* env = Environment::from_immediate_check_handle(handle);
+  TraceEventScope trace_scope(TRACING_CATEGORY_NODE1(environment),
+                              "CheckImmediate", env);
 
   if (env->immediate_info()->count() == 0)
     return;
@@ -684,14 +757,16 @@ void Environment::set_debug_categories(const std::string& cats, bool enabled) {
 }
 
 void CollectExceptionInfo(Environment* env,
-                          v8::Local<v8::Object> obj,
+                          Local<Object> obj,
                           int errorno,
                           const char* err_string,
                           const char* syscall,
                           const char* message,
                           const char* path,
                           const char* dest) {
-  obj->Set(env->errno_string(), v8::Integer::New(env->isolate(), errorno));
+  obj->Set(env->context(),
+           env->errno_string(),
+           Integer::New(env->isolate(), errorno)).FromJust();
 
   obj->Set(env->context(), env->code_string(),
            OneByteString(env->isolate(), err_string)).FromJust();
@@ -701,14 +776,14 @@ void CollectExceptionInfo(Environment* env,
              OneByteString(env->isolate(), message)).FromJust();
   }
 
-  v8::Local<v8::Value> path_buffer;
+  Local<Value> path_buffer;
   if (path != nullptr) {
     path_buffer =
       Buffer::Copy(env->isolate(), path, strlen(path)).ToLocalChecked();
     obj->Set(env->context(), env->path_string(), path_buffer).FromJust();
   }
 
-  v8::Local<v8::Value> dest_buffer;
+  Local<Value> dest_buffer;
   if (dest != nullptr) {
     dest_buffer =
       Buffer::Copy(env->isolate(), dest, strlen(dest)).ToLocalChecked();
@@ -721,7 +796,7 @@ void CollectExceptionInfo(Environment* env,
   }
 }
 
-void Environment::CollectExceptionInfo(v8::Local<v8::Value> object,
+void Environment::CollectExceptionInfo(Local<Value> object,
                                        int errorno,
                                        const char* syscall,
                                        const char* message,
@@ -729,7 +804,7 @@ void Environment::CollectExceptionInfo(v8::Local<v8::Value> object,
   if (!object->IsObject() || errorno == 0)
     return;
 
-  v8::Local<v8::Object> obj = object.As<v8::Object>();
+  Local<Object> obj = object.As<Object>();
   const char* err_string = node::errno_string(errorno);
 
   if (message == nullptr || message[0] == '\0') {
@@ -740,7 +815,7 @@ void Environment::CollectExceptionInfo(v8::Local<v8::Value> object,
                              syscall, message, path, nullptr);
 }
 
-void Environment::CollectUVExceptionInfo(v8::Local<v8::Value> object,
+void Environment::CollectUVExceptionInfo(Local<Value> object,
                                          int errorno,
                                          const char* syscall,
                                          const char* message,
@@ -749,7 +824,7 @@ void Environment::CollectUVExceptionInfo(v8::Local<v8::Value> object,
   if (!object->IsObject() || errorno == 0)
     return;
 
-  v8::Local<v8::Object> obj = object.As<v8::Object>();
+  Local<Object> obj = object.As<Object>();
   const char* err_string = uv_err_name(errorno);
 
   if (message == nullptr || message[0] == '\0') {
@@ -762,14 +837,7 @@ void Environment::CollectUVExceptionInfo(v8::Local<v8::Value> object,
 
 
 void Environment::AsyncHooks::grow_async_ids_stack() {
-  const uint32_t old_capacity = async_ids_stack_.Length() / 2;
-  const uint32_t new_capacity = old_capacity * 1.5;
-  AliasedBuffer<double, v8::Float64Array> new_buffer(
-      env()->isolate(), new_capacity * 2);
-
-  for (uint32_t i = 0; i < old_capacity * 2; ++i)
-    new_buffer[i] = async_ids_stack_[i];
-  async_ids_stack_ = std::move(new_buffer);
+  async_ids_stack_.reserve(async_ids_stack_.Length() * 3);
 
   env()->async_hooks_binding()->Set(
       env()->context(),
@@ -795,8 +863,8 @@ void Environment::stop_sub_worker_contexts() {
   }
 }
 
-void Environment::BuildEmbedderGraph(v8::Isolate* isolate,
-                                     v8::EmbedderGraph* graph,
+void Environment::BuildEmbedderGraph(Isolate* isolate,
+                                     EmbedderGraph* graph,
                                      void* data) {
   MemoryTracker tracker(isolate, graph);
   static_cast<Environment*>(data)->ForEachBaseObject([&](BaseObject* obj) {

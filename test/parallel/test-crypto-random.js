@@ -19,6 +19,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Flags: --pending-deprecation
 'use strict';
 const common = require('../common');
 
@@ -304,4 +305,13 @@ assert.throws(
       message: 'Callback must be a function',
     }
   );
+});
+
+
+['pseudoRandomBytes', 'prng', 'rng'].forEach((f) => {
+  const desc = Object.getOwnPropertyDescriptor(crypto, f);
+  assert.ok(desc);
+  assert.strictEqual(desc.configurable, true);
+  assert.strictEqual(desc.writable, true);
+  assert.strictEqual(desc.enumerable, false);
 });

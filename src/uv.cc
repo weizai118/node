@@ -39,10 +39,17 @@ using v8::String;
 using v8::Value;
 
 
-// TODO(joyeecheung): deprecate this function in favor of
-// lib/util.getSystemErrorName()
 void ErrName(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
+  if (env->options()->pending_deprecation && env->EmitErrNameWarning()) {
+    if (ProcessEmitDeprecationWarning(
+        env,
+        "Directly calling process.binding('uv').errname(<val>) is being"
+        " deprecated. "
+        "Please make sure to use util.getSystemErrorName() instead.",
+        "DEP0119").IsNothing())
+    return;
+  }
   int err;
   if (!args[0]->Int32Value(env->context()).To(&err)) return;
   CHECK_LT(err, 0);
@@ -56,10 +63,11 @@ void Initialize(Local<Object> target,
                 Local<Context> context) {
   Environment* env = Environment::GetCurrent(context);
   Isolate* isolate = env->isolate();
-  target->Set(FIXED_ONE_BYTE_STRING(isolate, "errname"),
+  target->Set(env->context(),
+              FIXED_ONE_BYTE_STRING(isolate, "errname"),
               env->NewFunctionTemplate(ErrName)
                   ->GetFunction(env->context())
-                  .ToLocalChecked());
+                  .ToLocalChecked()).FromJust();
 
 #define V(name, _) NODE_DEFINE_CONSTANT(target, UV_##name);
   UV_ERRNO_MAP(V)
@@ -68,12 +76,13 @@ void Initialize(Local<Object> target,
   Local<Map> err_map = Map::New(isolate);
 
 #define V(name, msg) do {                                                     \
-  Local<Array> arr = Array::New(isolate, 2);                                  \
-  arr->Set(0, OneByteString(isolate, #name));                                 \
-  arr->Set(1, OneByteString(isolate, msg));                                   \
+  Local<Value> arr[] = {                                                      \
+    OneByteString(isolate, #name),                                            \
+    OneByteString(isolate, msg)                                               \
+  };                                                                          \
   err_map->Set(context,                                                       \
                Integer::New(isolate, UV_##name),                              \
-               arr).ToLocalChecked();                                         \
+               Array::New(isolate, arr, arraysize(arr))).ToLocalChecked();    \
 } while (0);
   UV_ERRNO_MAP(V)
 #undef V

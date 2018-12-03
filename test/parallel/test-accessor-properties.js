@@ -1,7 +1,7 @@
 // Flags: --expose-internals
 'use strict';
 
-require('../common');
+const common = require('../common');
 
 // This tests that the accessor properties do not raise assertions
 // when called with incompatible receivers.
@@ -32,24 +32,41 @@ const UDP = internalBinding('udp_wrap').UDP;
     UDP.prototype.fd;
   }, TypeError);
 
+  const StreamWrapProto = Object.getPrototypeOf(TTY.prototype);
+
   // Should not throw for Object.getOwnPropertyDescriptor
   assert.strictEqual(
-    typeof Object.getOwnPropertyDescriptor(TTY.prototype, 'bytesRead'),
+    typeof Object.getOwnPropertyDescriptor(StreamWrapProto, 'bytesRead'),
     'object'
   );
 
   assert.strictEqual(
-    typeof Object.getOwnPropertyDescriptor(TTY.prototype, 'fd'),
+    typeof Object.getOwnPropertyDescriptor(StreamWrapProto, 'fd'),
     'object'
   );
 
   assert.strictEqual(
-    typeof Object.getOwnPropertyDescriptor(TTY.prototype, '_externalStream'),
+    typeof Object.getOwnPropertyDescriptor(StreamWrapProto, '_externalStream'),
     'object'
   );
 
   assert.strictEqual(
-    typeof Object.getOwnPropertyDescriptor(UDP.prototype, 'fd'),
+    typeof Object.getOwnPropertyDescriptor(StreamWrapProto, 'fd'),
     'object'
   );
+
+  if (common.hasCrypto) { // eslint-disable-line node-core/crypto-check
+    // There are accessor properties in crypto too
+    const crypto = process.binding('crypto');
+
+    assert.throws(() => {
+      crypto.SecureContext.prototype._external;
+    }, TypeError);
+
+    assert.strictEqual(
+      typeof Object.getOwnPropertyDescriptor(
+        crypto.SecureContext.prototype, '_external'),
+      'object'
+    );
+  }
 }

@@ -426,10 +426,10 @@ the function does not return a promise, `assert.doesNotReject()` will return a
 rejected `Promise` with an [`ERR_INVALID_RETURN_VALUE`][] error. In both cases
 the error handler is skipped.
 
-Please note: Using `assert.doesNotReject()` is actually not useful because there
-is little benefit by catching a rejection and then rejecting it again. Instead,
-consider adding a comment next to the specific code path that should not reject
-and keep error messages as expressive as possible.
+Using `assert.doesNotReject()` is actually not useful because there is little
+benefit in catching a rejection and then rejecting it again. Instead, consider
+adding a comment next to the specific code path that should not reject and keep
+error messages as expressive as possible.
 
 If specified, `error` can be a [`Class`][], [`RegExp`][] or a validation
 function. See [`assert.throws()`][] for more details.
@@ -472,8 +472,8 @@ changes:
 
 Asserts that the function `fn` does not throw an error.
 
-Please note: Using `assert.doesNotThrow()` is actually not useful because there
-is no benefit by catching an error and then rethrowing it. Instead, consider
+Using `assert.doesNotThrow()` is actually not useful because there
+is no benefit in catching an error and then rethrowing it. Instead, consider
 adding a comment next to the specific code path that should not throw and keep
 error messages as expressive as possible.
 
@@ -1245,8 +1245,8 @@ assert.throws(throwingFirst, /Second$/);
 Due to the confusing notation, it is recommended not to use a string as the
 second argument. This might lead to difficult-to-spot errors.
 
-[`ERR_INVALID_RETURN_VALUE`]: errors.html#errors_err_invalid_return_value
 [`Class`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes
+[`ERR_INVALID_RETURN_VALUE`]: errors.html#errors_err_invalid_return_value
 [`Error.captureStackTrace`]: errors.html#errors_error_capturestacktrace_targetobject_constructoropt
 [`Error`]: errors.html#errors_class_error
 [`Map`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map
@@ -1267,10 +1267,10 @@ second argument. This might lead to difficult-to-spot errors.
 [`assert.throws()`]: #assert_assert_throws_fn_error_message
 [`strict mode`]: #assert_strict_mode
 [Abstract Equality Comparison]: https://tc39.github.io/ecma262/#sec-abstract-equality-comparison
+[Object wrappers]: https://developer.mozilla.org/en-US/docs/Glossary/Primitive#Primitive_wrapper_objects_in_JavaScript
 [Object.prototype.toString()]: https://tc39.github.io/ecma262/#sec-object.prototype.tostring
 [SameValue Comparison]: https://tc39.github.io/ecma262/#sec-samevalue
 [Strict Equality Comparison]: https://tc39.github.io/ecma262/#sec-strict-equality-comparison
 [enumerable "own" properties]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Enumerability_and_ownership_of_properties
 [mdn-equality-guide]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Equality_comparisons_and_sameness
 [prototype-spec]: https://tc39.github.io/ecma262/#sec-ordinary-object-internal-methods-and-internal-slots
-[Object wrappers]: https://developer.mozilla.org/en-US/docs/Glossary/Primitive#Primitive_wrapper_objects_in_JavaScript
